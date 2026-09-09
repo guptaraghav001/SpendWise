@@ -12,14 +12,20 @@ const jwt = require('jsonwebtoken')
 
 const app = express()
 
-app.use(cors())
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL
+  })
+)
 app.use(express.json())
 
 const pool = new Pool({
-  user: 'raghav',
-  host: 'localhost',
-  database: 'spendwise',
-  port: 5432
+  connectionString: process.env.DATABASE_URL,
+
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false
 })
 
 pool.query('SELECT NOW()', (error, result) => {
@@ -30,8 +36,7 @@ pool.query('SELECT NOW()', (error, result) => {
   }
 })
 
-const PORT = 5001
-
+const PORT = process.env.PORT || 5001
 const authenticateToken = (req, res, next) => {
 
   const authHeader = req.headers.authorization

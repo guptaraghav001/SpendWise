@@ -1,5 +1,5 @@
 import { useState } from 'react'
-
+import API_URL from '../config/api.js'
 function LoginPage({ onRegister , onLogin}) {
 
   const [email, setEmail] = useState('')
@@ -17,7 +17,7 @@ function LoginPage({ onRegister , onLogin}) {
     password
   }
 
-  fetch('http://localhost:5001/api/auth/login', {
+  fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
 
     headers: {

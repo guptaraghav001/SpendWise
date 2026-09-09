@@ -1,3 +1,4 @@
+import API_URL from '../config/api.js'
 import { useState } from 'react'
 
 function RegisterPage({ onLogin }) {
@@ -25,8 +26,7 @@ function RegisterPage({ onLogin }) {
     password
   }
 
-  fetch('http://localhost:5001/api/auth/register', {
-    method: 'POST',
+fetch(`${API_URL}/api/auth/register`, {    method: 'POST',
 
     headers: {
       'Content-Type': 'application/json'

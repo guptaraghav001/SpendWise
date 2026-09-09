@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer} from 'recharts'
 import DashboardHeader from '../components/DashboardHeader.jsx'
 
+import API_URL from '../config/api.js'
 
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
@@ -42,7 +43,7 @@ useEffect(() => {
   setError('')
 
   fetch(
-    `http://localhost:5001/api/expenses?month=${selectedMonth}&year=${selectedYear}`,
+    `${API_URL}/api/expenses?month=${selectedMonth}&year=${selectedYear}`,
     {
       headers: {
         Authorization: `Bearer ${token}`
@@ -84,7 +85,7 @@ useEffect(() => {
   const token = localStorage.getItem('token')
 
   fetch(
-    `http://localhost:5001/api/budget?month=${selectedMonth}&year=${selectedYear}`,
+    `${API_URL}/api/budget?month=${selectedMonth}&year=${selectedYear}`,
     {
       headers: {
         Authorization: `Bearer ${token}`
@@ -168,7 +169,7 @@ const handleAddExpense = () => {
 
   const token = localStorage.getItem('token')
 
-fetch('http://localhost:5001/api/expenses', {
+fetch(`${API_URL}/api/expenses`, {
   method: 'POST',
 
   headers: {
@@ -217,7 +218,7 @@ const handleDeleteExpense = (id) => {
     return
   }
 const token = localStorage.getItem('token')
-  fetch(`http://localhost:5001/api/expenses/${id}`, {
+  fetch(`${API_URL}/api/expenses/${id}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`
@@ -280,7 +281,7 @@ const handleUpdateExpense = () => {
 
 const token = localStorage.getItem('token')
 
-  fetch(`http://localhost:5001/api/expenses/${editingId}`, {
+  fetch(`${API_URL}/api/expenses/${editingId}`, {
     method: 'PUT',
 
     headers: {
@@ -342,7 +343,7 @@ const handleSaveBudget = () => {
 
   const token = localStorage.getItem('token')
 
-  fetch('http://localhost:5001/api/budget', {
+  fetch(`${API_URL}/api/budget`, {
     method: 'PUT',
 
     headers: {
