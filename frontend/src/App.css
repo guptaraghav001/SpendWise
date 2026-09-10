@@ -292,7 +292,22 @@
 }
 
 
+.trend-analytics {
+  padding: 24px;
+  border-radius: 16px;
+  background: #1f1f1f;
+  margin-bottom: 30px;
+}
 
+.trend-analytics h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.trend-chart {
+  width: 100%;
+  margin-top: 20px;
+}
 
 /* =========================
    RESPONSIVE DESIGN
@@ -329,6 +344,11 @@
   .category-row {
     grid-template-columns: 1fr auto auto;
   }
+
+  .month-comparison {
+  grid-template-columns: 1fr;
+}
+
 }
 
 
@@ -374,4 +394,26 @@
 .analytics-card span {
   font-size: 14px;
   opacity: 0.75;
+}
+
+.month-comparison {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 25px;
+}
+
+.month-comparison > div {
+  padding: 16px;
+  border-radius: 12px;
+  background: #292929;
+}
+
+.month-comparison p {
+  margin: 0 0 8px;
+  opacity: 0.7;
+}
+
+.month-comparison strong {
+  font-size: 20px;
 }

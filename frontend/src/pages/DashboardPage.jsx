@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import {BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer} from 'recharts'
+import {BarChart,Bar,LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,ResponsiveContainer} from 'recharts'
+   
+
+
 import DashboardHeader from '../components/DashboardHeader.jsx'
 
 import API_URL from '../config/api.js'
@@ -30,6 +33,8 @@ const [selectedYear, setSelectedYear] = useState(
 const [editingId, setEditingId] = useState(null)
 
   const [expenses, setExpenses] = useState([])
+const [trendData, setTrendData] = useState([])
+const [trendRefresh, setTrendRefresh] = useState(0)
 
   const [loading, setLoading] = useState(true)
 const [error, setError] = useState('')
@@ -108,6 +113,38 @@ useEffect(() => {
     })
 
 }, [selectedMonth, selectedYear])
+
+
+useEffect(() => {
+  const token = localStorage.getItem('token')
+
+fetch(
+  `${API_URL}/api/analytics/trend?month=${selectedMonth}&year=${selectedYear}`,
+  {
+        headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch spending trend')
+      }
+
+      return response.json()
+    })
+    .then((data) => {
+      setTrendData(data)
+    })
+    .catch((error) => {
+      console.error(
+        'Error fetching spending trend:',
+        error
+      )
+    })
+
+}, [trendRefresh, selectedMonth, selectedYear])
+
+
 
       const spent = expenses.reduce(
   (total, expense) => total + Number(expense.amount),
@@ -228,6 +265,9 @@ if (
       setExpenseDate(
   new Date().toISOString().split('T')[0]
 )
+
+setTrendRefresh((value) => value + 1)
+
       setEditingId(null)
       setShowForm(false)
     })
@@ -235,6 +275,8 @@ if (
       console.error('Error adding expense:', error)
     })
 }
+
+
 const handleDeleteExpense = (id) => {
 
   const confirmDelete = window.confirm(
@@ -266,11 +308,13 @@ const token = localStorage.getItem('token')
       )
 
       setExpenses(updatedExpenses)
+      setTrendRefresh(trendRefresh + 1)
     })
     .catch((error) => {
       console.error('Error deleting expense:', error)
     })
 }
+
 
 const handleEditExpense = (expense) => {
   setEditingId(expense.id)
@@ -335,6 +379,7 @@ const token = localStorage.getItem('token')
       )
 
       setExpenses(updatedExpenses)
+setTrendRefresh((value) => value + 1)
 
       setEditingId(null)
       setTitle('')
@@ -438,6 +483,48 @@ const monthNames = [
   'December'
 ]
 
+
+const formattedTrendData = trendData.map((item) => ({
+  month: monthNames[Number(item.month) - 1].slice(0, 3),
+  amount: Number(item.total)
+}))
+
+const currentTrendItem = trendData.find(
+  (item) =>
+    Number(item.month) === selectedMonth &&
+    Number(item.year) === selectedYear
+)
+
+let previousMonth = selectedMonth - 1
+let previousYear = selectedYear
+
+if (previousMonth === 0) {
+  previousMonth = 12
+  previousYear = selectedYear - 1
+}
+
+const previousTrendItem = trendData.find(
+  (item) =>
+    Number(item.month) === previousMonth &&
+    Number(item.year) === previousYear
+)
+
+const currentMonthSpent = currentTrendItem
+  ? Number(currentTrendItem.total)
+  : 0
+
+const previousMonthSpent = previousTrendItem
+  ? Number(previousTrendItem.total)
+  : 0
+
+  const spendingChange =
+  previousMonthSpent > 0
+    ? (
+        ((currentMonthSpent - previousMonthSpent) /
+          previousMonthSpent) *
+        100
+      ).toFixed(1)
+    : null
 
 const formatCurrency = (value) => {
   return Number(value).toLocaleString('en-IN')
@@ -716,6 +803,79 @@ const formatCurrency = (value) => {
 
 )}
 
+<div className="trend-analytics">
+
+  <h2>6-Month Spending Trend</h2>
+
+<div className="month-comparison">
+
+  <div>
+    <p>This Month</p>
+    <strong>
+      ₹{formatCurrency(currentMonthSpent)}
+    </strong>
+  </div>
+
+  <div>
+    <p>Previous Month</p>
+    <strong>
+      ₹{formatCurrency(previousMonthSpent)}
+    </strong>
+  </div>
+
+  <div>
+    <p>Change</p>
+
+    <strong>
+      {spendingChange === null
+        ? 'No comparison'
+        : `${Number(spendingChange) >= 0 ? '↑' : '↓'} ${Math.abs(
+            Number(spendingChange)
+          )}%`}
+    </strong>
+  </div>
+
+</div>
+
+  {formattedTrendData.length === 0 ? (
+
+    <p>No spending history available yet.</p>
+
+  ) : (
+
+    <div className="trend-chart">
+
+      <ResponsiveContainer
+        width="100%"
+        height={300}
+      >
+
+        <LineChart data={formattedTrendData}>
+
+          <CartesianGrid strokeDasharray="3 3" />
+
+          <XAxis dataKey="month" />
+
+          <YAxis />
+
+          <Tooltip />
+
+          <Line
+            type="monotone"
+            dataKey="amount"
+            stroke="#646cff"
+            strokeWidth={3}
+          />
+
+        </LineChart>
+
+      </ResponsiveContainer>
+
+    </div>
+
+  )}
+
+</div>
 
   {Object.entries(categoryTotals).length === 0 ? (
     <p>No spending data for this month.</p>

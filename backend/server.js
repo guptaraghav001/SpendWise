@@ -481,6 +481,92 @@ app.put(
 )
 
 
+// GET 6-MONTH SPENDING TREND
+app.get(
+  '/api/analytics/trend',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !month ||
+        !year ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Valid month and year are required'
+        })
+      }
+
+      const result = await pool.query(
+  `WITH selected_period AS (
+     SELECT MAKE_DATE($2, $3, 1) AS selected_month
+   ),
+
+   months AS (
+     SELECT generate_series(
+       selected_month - INTERVAL '5 months',
+       selected_month,
+       INTERVAL '1 month'
+     )::DATE AS month_start
+
+     FROM selected_period
+   ),
+
+   monthly_spending AS (
+     SELECT
+       DATE_TRUNC('month', expense_date)::DATE AS month_start,
+       SUM(amount)::NUMERIC AS total
+
+     FROM expenses
+
+     WHERE user_id = $1
+
+     GROUP BY
+       DATE_TRUNC('month', expense_date)
+   )
+
+   SELECT
+     EXTRACT(YEAR FROM months.month_start)::INTEGER AS year,
+     EXTRACT(MONTH FROM months.month_start)::INTEGER AS month,
+
+     COALESCE(
+       monthly_spending.total,
+       0
+     )::NUMERIC AS total
+
+   FROM months
+
+   LEFT JOIN monthly_spending
+     ON monthly_spending.month_start =
+        months.month_start
+
+   ORDER BY months.month_start ASC`,
+  [
+    req.user.userId,
+    year,
+    month
+  ]
+)
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error(
+        'Error fetching spending trend:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
