@@ -51,4 +51,8 @@ CREATE TABLE IF NOT EXISTS budgets (
 
   CONSTRAINT unique_user_month_budget
     UNIQUE (user_id, month, year)
-);
+)
+
+
+;
+

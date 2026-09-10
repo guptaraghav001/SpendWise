@@ -148,6 +148,33 @@ const chartData = Object.entries(categoryTotals).map(
 )
 
 
+const largestExpense =
+  expenses.length > 0
+    ? expenses.reduce((largest, expense) =>
+        Number(expense.amount) > Number(largest.amount)
+          ? expense
+          : largest
+      )
+    : null
+
+    const averageExpense =
+  expenses.length > 0
+    ? spent / expenses.length
+    : 0
+
+
+    const topCategory =
+  Object.entries(categoryTotals).length > 0
+    ? Object.entries(categoryTotals).reduce(
+        (highest, current) =>
+          current[1] > highest[1]
+            ? current
+            : highest
+      )
+    : null
+
+
+
 const handleAddExpense = () => {
 
   if (!title || !amount || !expenseDate) {
@@ -411,6 +438,12 @@ const monthNames = [
   'December'
 ]
 
+
+const formatCurrency = (value) => {
+  return Number(value).toLocaleString('en-IN')
+}
+
+
   return (
 
     <div className="dashboard">
@@ -591,6 +624,62 @@ const monthNames = [
 ))}
 
 </div>
+
+
+
+<div className="analytics-summary">
+
+  <div className="analytics-card">
+    <p>Top Category</p>
+
+    <h3>
+      {topCategory
+        ? topCategory[0]
+        : 'No data'}
+    </h3>
+
+    {topCategory && (
+      <span>
+        ₹{formatCurrency(topCategory[1])}
+      </span>
+    )}
+  </div>
+
+
+  <div className="analytics-card">
+    <p>Largest Expense</p>
+
+    <h3>
+      {largestExpense
+        ? largestExpense.title
+        : 'No data'}
+    </h3>
+
+    {largestExpense && (
+      <span>
+        ₹{formatCurrency(largestExpense.amount)}
+      </span>
+    )}
+  </div>
+
+
+  <div className="analytics-card">
+    <p>Average Expense</p>
+
+    <h3>
+      ₹{formatCurrency(
+        averageExpense.toFixed(0)
+      )}
+    </h3>
+
+    <span>
+      {expenses.length} transactions
+    </span>
+  </div>
+
+</div>
+
+
 <div className="analytics">
 
   <h2>Spending by Category</h2>
