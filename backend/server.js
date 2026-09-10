@@ -12,11 +12,26 @@ const jwt = require('jsonwebtoken')
 
 const app = express()
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://spendwise-woml.onrender.com'
+]
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL
+    origin: (origin, callback) => {
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+
+    }
   })
 )
+
+
 app.use(express.json())
 
 const pool = new Pool({
