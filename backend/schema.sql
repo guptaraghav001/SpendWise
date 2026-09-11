@@ -56,3 +56,27 @@ CREATE TABLE IF NOT EXISTS budgets (
 
 ;
 
+CREATE TABLE IF NOT EXISTS savings_goals (
+  id SERIAL PRIMARY KEY,
+
+  user_id INTEGER NOT NULL,
+
+  title VARCHAR(100) NOT NULL,
+
+  target_amount DECIMAL(10, 2) NOT NULL
+    CHECK (target_amount > 0),
+
+  saved_amount DECIMAL(10, 2) NOT NULL
+    DEFAULT 0
+    CHECK (saved_amount >= 0),
+
+  target_date DATE,
+
+  created_at TIMESTAMP
+    DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_savings_goal_user
+    FOREIGN KEY (user_id)
+    REFERENCES users(id)
+    ON DELETE CASCADE
+);

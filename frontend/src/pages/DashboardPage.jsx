@@ -6,6 +6,8 @@ import {BarChart,Bar,LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,Responsive
 import DashboardHeader from '../components/DashboardHeader.jsx'
 
 import API_URL from '../config/api.js'
+import SavingsGoals from '../components/SavingsGoals.jsx'
+
 
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
@@ -835,6 +837,7 @@ const formatCurrency = (value) => {
     </strong>
   </div>
 
+
 </div>
 
   {formattedTrendData.length === 0 ? (
@@ -903,7 +906,7 @@ const formatCurrency = (value) => {
   )}
 
 </div>
-
+<SavingsGoals />
       </div>
     
   )

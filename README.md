@@ -16,7 +16,7 @@ category analytics.
 
 ## Preview
 
-![SpendWise dashboard screen showing a dark-themed personal budgeting app with a large SpendWise heading, welcome text, a month selector for September 2026, and three summary cards labeled Monthly Budget, Total Spent, and Remaining. The cards show zero values and empty-state messages, while the Recent Expenses and Spending by Category panels below also display no entries. The interface uses a minimalist, modern design with muted gray and black tones, creating a calm and organized financial-management feel.](/Users/raghav/Documents/dashboard.png)
+![SpendWise Dashboard](/Users/raghav/Documents/dashboard.png)
 
 ---
 

@@ -568,6 +568,271 @@ app.get(
 )
 
 
+// GET ALL SAVINGS GOALS
+app.get(
+  '/api/savings-goals',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT *
+         FROM savings_goals
+         WHERE user_id = $1
+         ORDER BY created_at DESC`,
+        [req.user.userId]
+      )
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error('Error fetching savings goals:', error)
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+// CREATE SAVINGS GOAL
+app.post(
+  '/api/savings-goals',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        title,
+        targetAmount,
+        targetDate
+      } = req.body
+
+      if (!title || !targetAmount) {
+        return res.status(400).json({
+          message: 'Title and target amount are required'
+        })
+      }
+
+      if (Number(targetAmount) <= 0) {
+        return res.status(400).json({
+          message: 'Target amount must be greater than 0'
+        })
+      }
+
+      const result = await pool.query(
+        `INSERT INTO savings_goals
+           (
+             user_id,
+             title,
+             target_amount,
+             target_date
+           )
+
+         VALUES ($1, $2, $3, $4)
+
+         RETURNING *`,
+        [
+          req.user.userId,
+          title.trim(),
+          Number(targetAmount),
+          targetDate || null
+        ]
+      )
+
+      res.status(201).json(result.rows[0])
+
+    } catch (error) {
+      console.error('Error creating savings goal:', error)
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// UPDATE SAVINGS GOAL
+app.put(
+  '/api/savings-goals/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id)
+
+      const {
+        title,
+        targetAmount,
+        targetDate
+      } = req.body
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          message: 'Invalid savings goal ID'
+        })
+      }
+
+      if (!title || !targetAmount) {
+        return res.status(400).json({
+          message: 'Title and target amount are required'
+        })
+      }
+
+      if (Number(targetAmount) <= 0) {
+        return res.status(400).json({
+          message: 'Target amount must be greater than 0'
+        })
+      }
+
+      const result = await pool.query(
+        `UPDATE savings_goals
+
+         SET title = $1,
+             target_amount = $2,
+             target_date = $3
+
+         WHERE id = $4
+         AND user_id = $5
+
+         RETURNING *`,
+        [
+          title.trim(),
+          Number(targetAmount),
+          targetDate || null,
+          id,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Savings goal not found'
+        })
+      }
+
+      res.json(result.rows[0])
+
+    } catch (error) {
+      console.error('Error updating savings goal:', error)
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+
+// ADD MONEY TO SAVINGS GOAL
+app.patch(
+  '/api/savings-goals/:id/add',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id)
+      const { amount } = req.body
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          message: 'Invalid savings goal ID'
+        })
+      }
+
+      if (!amount || Number(amount) <= 0) {
+        return res.status(400).json({
+          message: 'Amount must be greater than 0'
+        })
+      }
+
+      const result = await pool.query(
+        `UPDATE savings_goals
+
+         SET saved_amount =
+           saved_amount + $1
+
+         WHERE id = $2
+         AND user_id = $3
+
+         RETURNING *`,
+        [
+          Number(amount),
+          id,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Savings goal not found'
+        })
+      }
+
+      res.json(result.rows[0])
+
+    } catch (error) {
+      console.error('Error adding savings:', error)
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+
+
+
+// DELETE SAVINGS GOAL
+app.delete(
+  '/api/savings-goals/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id)
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          message: 'Invalid savings goal ID'
+        })
+      }
+
+      const result = await pool.query(
+        `DELETE FROM savings_goals
+
+         WHERE id = $1
+         AND user_id = $2
+
+         RETURNING *`,
+        [
+          id,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Savings goal not found'
+        })
+      }
+
+      res.json({
+        message: 'Savings goal deleted successfully',
+        goal: result.rows[0]
+      })
+
+    } catch (error) {
+      console.error('Error deleting savings goal:', error)
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
