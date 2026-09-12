@@ -832,6 +832,437 @@ app.delete(
 )
 
 
+// GET ALL RECURRING EXPENSES
+app.get(
+  '/api/recurring-expenses',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT *
+         FROM recurring_expenses
+         WHERE user_id = $1
+         ORDER BY next_due_date ASC`,
+        [req.user.userId]
+      )
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error(
+        'Error fetching recurring expenses:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+// CREATE RECURRING EXPENSE
+app.post(
+  '/api/recurring-expenses',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        title,
+        category,
+        amount,
+        frequency,
+        startDate
+      } = req.body
+
+      if (
+        !title ||
+        !category ||
+        !amount ||
+        !frequency ||
+        !startDate
+      ) {
+        return res.status(400).json({
+          message:
+            'Title, category, amount, frequency and start date are required'
+        })
+      }
+
+      if (Number(amount) <= 0) {
+        return res.status(400).json({
+          message: 'Amount must be greater than 0'
+        })
+      }
+
+      if (
+        frequency !== 'monthly' &&
+        frequency !== 'yearly'
+      ) {
+        return res.status(400).json({
+          message: 'Invalid recurring frequency'
+        })
+      }
+
+      const result = await pool.query(
+        `INSERT INTO recurring_expenses
+         (
+           user_id,
+           title,
+           category,
+           amount,
+           frequency,
+           start_date,
+           billing_day,
+           next_due_date
+         )
+
+         VALUES (
+           $1,
+           $2,
+           $3,
+           $4,
+           $5,
+           $6,
+           EXTRACT(DAY FROM $6::DATE)::INTEGER,
+           $6
+         )
+
+         RETURNING *`,
+        [
+          req.user.userId,
+          title.trim(),
+          category,
+          Number(amount),
+          frequency,
+          startDate
+        ]
+      )
+
+      res.status(201).json(result.rows[0])
+
+    } catch (error) {
+      console.error(
+        'Error creating recurring expense:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// UPDATE RECURRING EXPENSE
+app.put(
+  '/api/recurring-expenses/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id)
+
+      const {
+        title,
+        category,
+        amount,
+        frequency,
+        startDate
+      } = req.body
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          message: 'Invalid recurring expense ID'
+        })
+      }
+
+      if (
+        !title ||
+        !category ||
+        !amount ||
+        !frequency ||
+        !startDate
+      ) {
+        return res.status(400).json({
+          message:
+            'Title, category, amount, frequency and start date are required'
+        })
+      }
+
+      if (Number(amount) <= 0) {
+        return res.status(400).json({
+          message: 'Amount must be greater than 0'
+        })
+      }
+
+      if (
+        frequency !== 'monthly' &&
+        frequency !== 'yearly'
+      ) {
+        return res.status(400).json({
+          message: 'Invalid recurring frequency'
+        })
+      }
+
+      const result = await pool.query(
+        `UPDATE recurring_expenses
+
+         SSET title = $1,
+    category = $2,
+    amount = $3,
+    frequency = $4,
+    start_date = $5,
+    billing_day =
+      EXTRACT(DAY FROM $5::DATE)::INTEGER,
+    next_due_date = $5
+
+         WHERE id = $6
+         AND user_id = $7
+
+         RETURNING *`,
+        [
+          title.trim(),
+          category,
+          Number(amount),
+          frequency,
+          startDate,
+          id,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Recurring expense not found'
+        })
+      }
+
+      res.json(result.rows[0])
+
+    } catch (error) {
+      console.error(
+        'Error updating recurring expense:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
+// DELETE RECURRING EXPENSE
+app.delete(
+  '/api/recurring-expenses/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id)
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          message: 'Invalid recurring expense ID'
+        })
+      }
+
+      const result = await pool.query(
+        `DELETE FROM recurring_expenses
+         WHERE id = $1
+         AND user_id = $2
+         RETURNING *`,
+        [
+          id,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Recurring expense not found'
+        })
+      }
+
+      res.json({
+        message:
+          'Recurring expense deleted successfully',
+        recurringExpense: result.rows[0]
+      })
+
+    } catch (error) {
+      console.error(
+        'Error deleting recurring expense:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// PROCESS DUE RECURRING EXPENSES
+app.post(
+  '/api/recurring-expenses/process',
+  authenticateToken,
+  async (req, res) => {
+
+    const client = await pool.connect()
+
+    try {
+      await client.query('BEGIN')
+
+      const recurringResult = await client.query(
+        `SELECT *
+         FROM recurring_expenses
+
+         WHERE user_id = $1
+         AND active = TRUE
+         AND next_due_date <= CURRENT_DATE
+
+         ORDER BY next_due_date ASC
+
+         FOR UPDATE`,
+        [req.user.userId]
+      )
+
+      let generatedCount = 0
+
+      for (const recurring of recurringResult.rows) {
+
+        let dueDate = new Date(
+          `${recurring.next_due_date
+            .toISOString()
+            .split('T')[0]}T00:00:00Z`
+        )
+
+        const today = new Date()
+
+        today.setUTCHours(0, 0, 0, 0)
+
+        while (dueDate <= today) {
+
+          const dueDateString =
+            dueDate.toISOString().split('T')[0]
+
+          const insertResult = await client.query(
+            `INSERT INTO expenses
+             (
+               user_id,
+               recurring_expense_id,
+               title,
+               category,
+               amount,
+               expense_date
+             )
+
+             VALUES ($1, $2, $3, $4, $5, $6)
+
+             ON CONFLICT (
+               recurring_expense_id,
+               expense_date
+             )
+             WHERE recurring_expense_id IS NOT NULL
+
+             DO NOTHING
+
+             RETURNING id`,
+            [
+              req.user.userId,
+              recurring.id,
+              recurring.title,
+              recurring.category,
+              recurring.amount,
+              dueDateString
+            ]
+          )
+
+        if (recurring.frequency === 'monthly') {
+
+  const nextMonthFirstDay = new Date(
+    Date.UTC(
+      dueDate.getUTCFullYear(),
+      dueDate.getUTCMonth() + 1,
+      1
+    )
+  )
+
+  const lastDayOfNextMonth =
+    new Date(
+      Date.UTC(
+        nextMonthFirstDay.getUTCFullYear(),
+        nextMonthFirstDay.getUTCMonth() + 1,
+        0
+      )
+    ).getUTCDate()
+
+  const safeDay = Math.min(
+    recurring.billing_day,
+    lastDayOfNextMonth
+  )
+
+  dueDate = new Date(
+    Date.UTC(
+      nextMonthFirstDay.getUTCFullYear(),
+      nextMonthFirstDay.getUTCMonth(),
+      safeDay
+    )
+  )
+
+} else {
+
+  dueDate.setUTCFullYear(
+    dueDate.getUTCFullYear() + 1
+  )
+
+}
+        }
+
+        const nextDueDate =
+          dueDate.toISOString().split('T')[0]
+
+        await client.query(
+          `UPDATE recurring_expenses
+
+           SET next_due_date = $1
+
+           WHERE id = $2
+           AND user_id = $3`,
+          [
+            nextDueDate,
+            recurring.id,
+            req.user.userId
+          ]
+        )
+      }
+
+      await client.query('COMMIT')
+
+      res.json({
+        message: 'Recurring expenses processed successfully',
+        generatedCount
+      })
+
+    } catch (error) {
+
+      await client.query('ROLLBACK')
+
+      console.error(
+        'Error processing recurring expenses:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+
+    } finally {
+      client.release()
+    }
+  }
+)
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)

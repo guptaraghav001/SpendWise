@@ -7,7 +7,7 @@ import DashboardHeader from '../components/DashboardHeader.jsx'
 
 import API_URL from '../config/api.js'
 import SavingsGoals from '../components/SavingsGoals.jsx'
-
+import RecurringExpenses from '../components/RecurringExpenses.jsx'
 
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
@@ -35,14 +35,76 @@ const [selectedYear, setSelectedYear] = useState(
 const [editingId, setEditingId] = useState(null)
 
   const [expenses, setExpenses] = useState([])
+
+  const [searchTerm, setSearchTerm] = useState('')
+const [filterCategory, setFilterCategory] = useState('All')
+const [sortOption, setSortOption] = useState('newest')
+
 const [trendData, setTrendData] = useState([])
 const [trendRefresh, setTrendRefresh] = useState(0)
-
+const [expenseRefresh, setExpenseRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
 const [error, setError] = useState('')
 
 
-  
+const processRecurringExpenses = async () => {
+  const token = localStorage.getItem('token')
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/recurring-expenses/process`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(
+        'Failed to process recurring expenses'
+      )
+    }
+
+    return await response.json()
+
+  } catch (error) {
+    console.error(
+      'Recurring expense processing error:',
+      error
+    )
+
+    return null
+  }
+}
+
+
+  useEffect(() => {
+  const runRecurringProcessing = async () => {
+    const result = await processRecurringExpenses()
+
+    if (
+      result &&
+      result.generatedCount > 0
+    ) {
+      setExpenseRefresh(
+        (value) => value + 1
+      )
+
+      setTrendRefresh(
+        (value) => value + 1
+      )
+    }
+  }
+
+  runRecurringProcessing()
+
+}, [])
+
+
+
+
 useEffect(() => {
   const token = localStorage.getItem('token')
 
@@ -114,7 +176,7 @@ useEffect(() => {
       setBudget(0)
     })
 
-}, [selectedMonth, selectedYear])
+}, [selectedMonth, selectedYear ,expenseRefresh])
 
 
 useEffect(() => {
@@ -232,6 +294,7 @@ const handleAddExpense = () => {
   amount: Number(amount),
   expenseDate: expenseDate
 }
+
 
   const token = localStorage.getItem('token')
 
@@ -533,6 +596,110 @@ const formatCurrency = (value) => {
 }
 
 
+const filteredExpenses = expenses
+  .filter((expense) => {
+
+    const matchesSearch =
+      expense.title
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
+
+    const matchesCategory =
+      filterCategory === 'All' ||
+      expense.category === filterCategory
+
+    return matchesSearch && matchesCategory
+  })
+  .sort((a, b) => {
+
+    if (sortOption === 'newest') {
+      return (
+        new Date(b.expense_date) -
+        new Date(a.expense_date)
+      )
+    }
+
+    if (sortOption === 'oldest') {
+      return (
+        new Date(a.expense_date) -
+        new Date(b.expense_date)
+      )
+    }
+
+    if (sortOption === 'highest') {
+      return Number(b.amount) - Number(a.amount)
+    }
+
+    if (sortOption === 'lowest') {
+      return Number(a.amount) - Number(b.amount)
+    }
+
+    return 0
+  })
+
+
+  const handleExportCSV = () => {
+
+  if (expenses.length === 0) {
+    alert('No expenses available to export')
+    return
+  }
+
+  const headers = [
+    'Title',
+    'Category',
+    'Amount',
+    'Date'
+  ]
+
+  const rows = expenses.map((expense) => [
+    expense.title,
+    expense.category,
+    Number(expense.amount),
+    new Date(expense.expense_date)
+      .toLocaleDateString('en-IN')
+  ])
+
+  const csvContent = [
+    headers,
+    ...rows
+  ]
+    .map((row) =>
+      row
+        .map((value) =>
+          `"${String(value).replace(/"/g, '""')}"`
+        )
+        .join(',')
+    )
+    .join('\n')
+
+  const blob = new Blob(
+    [csvContent],
+    {
+      type: 'text/csv;charset=utf-8;'
+    }
+  )
+
+  const url = URL.createObjectURL(blob)
+
+  const link = document.createElement('a')
+
+  link.href = url
+
+  link.download =
+    `SpendWise-${monthNames[selectedMonth - 1]}-${selectedYear}.csv`
+
+  document.body.appendChild(link)
+
+  link.click()
+
+  document.body.removeChild(link)
+
+  URL.revokeObjectURL(url)
+}
+
+
+
   return (
 
     <div className="dashboard">
@@ -612,11 +779,66 @@ const formatCurrency = (value) => {
   </p>
 )}
 
-          <h2>Recent Expenses</h2>
-<button onClick={() => setShowForm(true)}>
-  + Add Expense
-</button>       
+            <button onClick={handleExportCSV}>
+    Export CSV
+  </button>
+
+  <button onClick={() => setShowForm(true)}>
+    + Add Expense
+  </button>    
  </div>
+
+
+<div className="expense-filters">
+
+  <input
+    type="text"
+    placeholder="Search expenses..."
+    value={searchTerm}
+    onChange={(event) =>
+      setSearchTerm(event.target.value)
+    }
+  />
+
+  <select
+    value={filterCategory}
+    onChange={(event) =>
+      setFilterCategory(event.target.value)
+    }
+  >
+    <option value="All">All Categories</option>
+    <option value="Food">Food</option>
+    <option value="Travel">Travel</option>
+    <option value="Shopping">Shopping</option>
+    <option value="Bills">Bills</option>
+    <option value="Other">Other</option>
+  </select>
+
+  <select
+    value={sortOption}
+    onChange={(event) =>
+      setSortOption(event.target.value)
+    }
+  >
+    <option value="newest">Newest First</option>
+    <option value="oldest">Oldest First</option>
+    <option value="highest">Highest Amount</option>
+    <option value="lowest">Lowest Amount</option>
+  </select>
+
+  <button
+    onClick={() => {
+      setSearchTerm('')
+      setFilterCategory('All')
+      setSortOption('newest')
+    }}
+  >
+    Clear Filters
+  </button>
+
+</div>
+
+
 
 
 {showForm && (
@@ -671,8 +893,17 @@ const formatCurrency = (value) => {
   <p>No expenses recorded for this month.</p>
 )}
 
-       {expenses.map((expense) => (
-  <div className="transaction" key={expense.id}>
+{!loading &&
+  !error &&
+  expenses.length > 0 &&
+  filteredExpenses.length === 0 && (
+    <p>
+      No expenses match your search or filters.
+    </p>
+  )}
+
+{filteredExpenses.map((expense) => (
+    <div className="transaction" key={expense.id}>
 
     <div>
   <strong>{expense.title}</strong>
@@ -907,6 +1138,7 @@ const formatCurrency = (value) => {
 
 </div>
 <SavingsGoals />
+<RecurringExpenses />
       </div>
     
   )
