@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import API_URL from '../config/api.js'
-
+import { handleApiResponse } from '../utils/handleApiResponse.js'
 function RecurringExpenses() {
   const [recurringExpenses, setRecurringExpenses] = useState([])
 
@@ -16,6 +16,10 @@ function RecurringExpenses() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [savingRecurring, setSavingRecurring] =
+  useState(false)
+
+
   useEffect(() => {
     const token = localStorage.getItem('token')
 
@@ -24,13 +28,8 @@ function RecurringExpenses() {
         Authorization: `Bearer ${token}`
       }
     })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to load recurring expenses')
-        }
+    .then(handleApiResponse)
 
-        return response.json()
-      })
       .then((data) => {
         setRecurringExpenses(data)
       })
@@ -62,7 +61,7 @@ function RecurringExpenses() {
       alert('Amount must be greater than 0')
       return
     }
-
+setSavingRecurring(true)
     const token = localStorage.getItem('token')
 
     const recurringData = {
@@ -87,17 +86,8 @@ function RecurringExpenses() {
 
       body: JSON.stringify(recurringData)
     })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            editingId
-              ? 'Failed to update recurring expense'
-              : 'Failed to create recurring expense'
-          )
-        }
-
-        return response.json()
-      })
+  .then(handleApiResponse)
+      
       .then((savedExpense) => {
         if (editingId) {
           setRecurringExpenses((current) =>
@@ -118,6 +108,9 @@ function RecurringExpenses() {
       })
       .catch((error) => {
         setError(error.message)
+      })
+      .finally(() => {
+        setSavingRecurring(false)
       })
   }
 
@@ -156,13 +149,8 @@ function RecurringExpenses() {
         Authorization: `Bearer ${token}`
       }
     })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to delete recurring expense')
-        }
-
-        return response.json()
-      })
+   .then(handleApiResponse)
+   
       .then(() => {
         setRecurringExpenses((current) =>
           current.filter(
@@ -254,12 +242,16 @@ function RecurringExpenses() {
             }
           />
 
-          <button onClick={handleSave}>
-            {editingId
-              ? 'Update Recurring'
-              : 'Create Recurring'}
-          </button>
-
+         <button
+  disabled={savingRecurring}
+  onClick={handleSave}
+>
+  {savingRecurring
+    ? 'Saving...'
+    : editingId
+      ? 'Update Recurring'
+      : 'Create Recurring'}
+</button>
         </div>
       )}
 

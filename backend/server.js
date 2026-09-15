@@ -1,38 +1,56 @@
 require('dotenv').config()
+
 const express = require('express')
 const cors = require('cors')
-
-
+const rateLimit = require('express-rate-limit')
 const { Pool } = require('pg')
-
-
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
-
+const helmet = require('helmet')
 
 const app = express()
+
+const PORT = process.env.PORT || 5001
+
+// ======================================================
+// SECURITY / MIDDLEWARE
+// ======================================================
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    message:
+      'Too many authentication attempts. Please try again later.'
+  }
+})
 
 const allowedOrigins = [
   'http://localhost:5173',
   'https://spendwise-woml.onrender.com'
 ]
 
+app.use(helmet())
+
 app.use(
   cors({
     origin: (origin, callback) => {
-
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true)
       } else {
         callback(new Error('Not allowed by CORS'))
       }
-
     }
   })
 )
 
+app.use(express.json({ limit: '100kb' }))
 
-app.use(express.json())
+// ======================================================
+// DATABASE
+// ======================================================
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -43,7 +61,7 @@ const pool = new Pool({
       : false
 })
 
-pool.query('SELECT NOW()', (error, result) => {
+pool.query('SELECT NOW()', (error) => {
   if (error) {
     console.error('Database connection error:', error)
   } else {
@@ -51,13 +69,56 @@ pool.query('SELECT NOW()', (error, result) => {
   }
 })
 
-const PORT = process.env.PORT || 5001
-const authenticateToken = (req, res, next) => {
+// ======================================================
+// COMMON VALIDATION
+// ======================================================
 
+const allowedCategories = [
+  'Food',
+  'Travel',
+  'Shopping',
+  'Bills',
+  'Other'
+]
+
+const allowedFrequencies = [
+  'monthly',
+  'yearly'
+]
+
+const isValidDateString = (value) => {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return false
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  )
+}
+
+// ======================================================
+// AUTHENTICATION MIDDLEWARE
+// ======================================================
+
+const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization
 
-  const token =
-    authHeader && authHeader.split(' ')[1]
+  if (
+    !authHeader ||
+    !authHeader.startsWith('Bearer ')
+  ) {
+    return res.status(401).json({
+      message: 'Authentication required'
+    })
+  }
+
+  const token = authHeader.slice(7)
 
   if (!token) {
     return res.status(401).json({
@@ -69,7 +130,6 @@ const authenticateToken = (req, res, next) => {
     token,
     process.env.JWT_SECRET,
     (error, decoded) => {
-
       if (error) {
         return res.status(403).json({
           message: 'Invalid or expired token'
@@ -77,160 +137,270 @@ const authenticateToken = (req, res, next) => {
       }
 
       req.user = decoded
-
       next()
     }
- 
-
-
-)
+  )
 }
+
+// ======================================================
+// HEALTH ROUTE
+// ======================================================
 
 app.get('/', (req, res) => {
   res.send('SpendWise backend is running!')
 })
 
+// ======================================================
+// AUTH
+// ======================================================
+
 // REGISTER USER
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body
+app.post(
+  '/api/auth/register',
+  authLimiter,
+  async (req, res) => {
+    try {
+      const { name, email, password } = req.body
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message: 'Name, email and password are required'
+      const cleanName = name?.trim()
+      const cleanEmail =
+        email?.trim().toLowerCase()
+
+      if (!cleanName || !cleanEmail || !password) {
+        return res.status(400).json({
+          message:
+            'Name, email and password are required'
+        })
+      }
+
+      if (cleanName.length > 100) {
+        return res.status(400).json({
+          message:
+            'Name must be 100 characters or less'
+        })
+      }
+
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          cleanEmail
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Please enter a valid email address'
+        })
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({
+          message:
+            'Password must be at least 8 characters'
+        })
+      }
+
+      if (password.length > 128) {
+        return res.status(400).json({
+          message: 'Password is too long'
+        })
+      }
+
+      const existingUser = await pool.query(
+        `SELECT id
+         FROM users
+         WHERE email = $1`,
+        [cleanEmail]
+      )
+
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({
+          message: 'Email already registered'
+        })
+      }
+
+      const hashedPassword =
+        await bcrypt.hash(password, 12)
+
+      const result = await pool.query(
+        `INSERT INTO users
+           (name, email, password)
+
+         VALUES ($1, $2, $3)
+
+         RETURNING
+           id,
+           name,
+           email,
+           created_at`,
+        [
+          cleanName,
+          cleanEmail,
+          hashedPassword
+        ]
+      )
+
+      res.status(201).json({
+        message: 'Registration successful',
+        user: result.rows[0]
+      })
+
+    } catch (error) {
+      console.error(
+        'Registration error:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
       })
     }
-
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
-    )
-
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({
-        message: 'Email already registered'
-      })
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12)
-
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, email, created_at`,
-      [name, email, hashedPassword]
-    )
-
-    res.status(201).json({
-      message: 'Registration successful',
-      user: result.rows[0]
-    })
-
-  } catch (error) {
-    console.error('Registration error:', error)
-
-    res.status(500).json({
-      message: 'Server error'
-    })
   }
-})
+)
 
 // LOGIN USER
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body
+app.post(
+  '/api/auth/login',
+  authLimiter,
+  async (req, res) => {
+    try {
+      const { email, password } = req.body
 
-    if (!email || !password) {
-      return res.status(400).json({
-        message: 'Email and password are required'
-      })
-    }
+      const cleanEmail =
+        email?.trim().toLowerCase()
 
-    const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        message: 'Invalid email or password'
-      })
-    }
-
-    const user = result.rows[0]
-
-    const passwordMatches = await bcrypt.compare(
-      password,
-      user.password
-    )
-
-    if (!passwordMatches) {
-      return res.status(401).json({
-        message: 'Invalid email or password'
-      })
-    }
-
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: '1h'
+      if (!cleanEmail || !password) {
+        return res.status(400).json({
+          message:
+            'Email and password are required'
+        })
       }
-    )
 
-    res.json({
-      message: 'Login successful',
+      const result = await pool.query(
+        `SELECT *
+         FROM users
+         WHERE email = $1`,
+        [cleanEmail]
+      )
 
-      token: token,
-
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email
+      if (result.rows.length === 0) {
+        return res.status(401).json({
+          message:
+            'Invalid email or password'
+        })
       }
-    })
 
-  } catch (error) {
-    console.error('Login error:', error)
+      const user = result.rows[0]
 
-    res.status(500).json({
-      message: 'Server error'
-    })
+      const passwordMatches =
+        await bcrypt.compare(
+          password,
+          user.password
+        )
+
+      if (!passwordMatches) {
+        return res.status(401).json({
+          message:
+            'Invalid email or password'
+        })
+      }
+
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: '1h'
+        }
+      )
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email
+        }
+      })
+
+    } catch (error) {
+      console.error(
+        'Login error:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
   }
-})
+)
 
+// ======================================================
+// EXPENSES
+// ======================================================
+
+// GET MONTHLY EXPENSES
 app.get(
   '/api/expenses',
   authenticateToken,
   async (req, res) => {
-
     try {
-const month = Number(req.query.month)
-const year = Number(req.query.year)
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
 
-if (!month || !year) {
-  return res.status(400).json({
-    message: 'Month and year are required'
-  })
-}
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
       const result = await pool.query(
         `SELECT *
          FROM expenses
+
          WHERE user_id = $1
-         AND EXTRACT(MONTH FROM expense_date) = $2
-         AND EXTRACT(YEAR FROM expense_date) = $3
-         ORDER BY id DESC`,
-        [req.user.userId, month, year]
+
+         AND EXTRACT(
+           MONTH FROM expense_date
+         ) = $2
+
+         AND EXTRACT(
+           YEAR FROM expense_date
+         ) = $3
+
+         ORDER BY
+           expense_date DESC,
+           id DESC`,
+        [
+          req.user.userId,
+          month,
+          year
+        ]
       )
 
       res.json(result.rows)
 
     } catch (error) {
-
-      console.error(error)
+      console.error(
+        'Error fetching expenses:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -239,44 +409,89 @@ if (!month || !year) {
   }
 )
 
+// CREATE EXPENSE
 app.post(
   '/api/expenses',
   authenticateToken,
   async (req, res) => {
     try {
-      const { title, category, amount ,expenseDate} = req.body
+      const {
+        title,
+        category,
+        amount,
+        expenseDate
+      } = req.body
 
-if (!title || !category || !amount || !expenseDate) {        return res.status(400).json({
-          message: 'Title, category, amount and date are required'
+      const cleanTitle = title?.trim()
+      const numericAmount = Number(amount)
+
+      if (
+        !cleanTitle ||
+        cleanTitle.length > 100
+      ) {
+        return res.status(400).json({
+          message:
+            'Expense title must be between 1 and 100 characters'
         })
       }
 
-      if (Number(amount) <= 0) {
-  return res.status(400).json({
-    message: 'Amount must be greater than 0'
-  })
-}
+      if (
+        !allowedCategories.includes(category)
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid expense category'
+        })
+      }
 
-     const result = await pool.query(
-  `INSERT INTO expenses
-   (title, category, amount, user_id, expense_date)
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Amount must be greater than 0'
+        })
+      }
 
-   VALUES ($1, $2, $3, $4, $5)
+      if (!isValidDateString(expenseDate)) {
+        return res.status(400).json({
+          message:
+            'A valid expense date is required'
+        })
+      }
 
-   RETURNING *`,
-  [
-    title,
-    category,
-    amount,
-    req.user.userId,
-    expenseDate
-  ]
-)
+      const result = await pool.query(
+        `INSERT INTO expenses
+           (
+             title,
+             category,
+             amount,
+             user_id,
+             expense_date
+           )
 
-      res.status(201).json(result.rows[0])
+         VALUES ($1, $2, $3, $4, $5)
+
+         RETURNING *`,
+        [
+          cleanTitle,
+          category,
+          numericAmount,
+          req.user.userId,
+          expenseDate
+        ]
+      )
+
+      res.status(201).json(
+        result.rows[0]
+      )
 
     } catch (error) {
-      console.error('Error creating expense:', error)
+      console.error(
+        'Error creating expense:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -285,40 +500,85 @@ if (!title || !category || !amount || !expenseDate) {        return res.status(4
   }
 )
 
+// UPDATE EXPENSE
 app.put(
   '/api/expenses/:id',
   authenticateToken,
   async (req, res) => {
     try {
       const id = Number(req.params.id)
-      const { title, category, amount, expenseDate } = req.body
 
-      if (!title || !category || !amount || !expenseDate) {
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
         return res.status(400).json({
-          message: 'Title, category, amount and date are required'
+          message: 'Invalid expense ID'
         })
       }
 
-      if (Number(amount) <= 0) {
-  return res.status(400).json({
-    message: 'Amount must be greater than 0'
-  })
-}
+      const {
+        title,
+        category,
+        amount,
+        expenseDate
+      } = req.body
 
+      const cleanTitle = title?.trim()
+      const numericAmount = Number(amount)
+
+      if (
+        !cleanTitle ||
+        cleanTitle.length > 100
+      ) {
+        return res.status(400).json({
+          message:
+            'Expense title must be between 1 and 100 characters'
+        })
+      }
+
+      if (
+        !allowedCategories.includes(category)
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid expense category'
+        })
+      }
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Amount must be greater than 0'
+        })
+      }
+
+      if (!isValidDateString(expenseDate)) {
+        return res.status(400).json({
+          message:
+            'A valid expense date is required'
+        })
+      }
 
       const result = await pool.query(
         `UPDATE expenses
+
          SET title = $1,
              category = $2,
              amount = $3,
              expense_date = $4
+
          WHERE id = $5
          AND user_id = $6
+
          RETURNING *`,
         [
-          title,
+          cleanTitle,
           category,
-          amount,
+          numericAmount,
           expenseDate,
           id,
           req.user.userId
@@ -334,7 +594,10 @@ app.put(
       res.json(result.rows[0])
 
     } catch (error) {
-      console.error('Error updating expense:', error)
+      console.error(
+        'Error updating expense:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -343,6 +606,7 @@ app.put(
   }
 )
 
+// DELETE EXPENSE
 app.delete(
   '/api/expenses/:id',
   authenticateToken,
@@ -350,10 +614,21 @@ app.delete(
     try {
       const id = Number(req.params.id)
 
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
+        return res.status(400).json({
+          message: 'Invalid expense ID'
+        })
+      }
+
       const result = await pool.query(
         `DELETE FROM expenses
+
          WHERE id = $1
          AND user_id = $2
+
          RETURNING *`,
         [
           id,
@@ -368,12 +643,16 @@ app.delete(
       }
 
       res.json({
-        message: 'Expense deleted successfully',
+        message:
+          'Expense deleted successfully',
         expense: result.rows[0]
       })
 
     } catch (error) {
-      console.error('Error deleting expense:', error)
+      console.error(
+        'Error deleting expense:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -382,6 +661,11 @@ app.delete(
   }
 )
 
+// ======================================================
+// BUDGETS
+// ======================================================
+
+// GET BUDGET
 app.get(
   '/api/budget',
   authenticateToken,
@@ -390,15 +674,30 @@ app.get(
       const month = Number(req.query.month)
       const year = Number(req.query.year)
 
-      if (!month || !year) {
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
         return res.status(400).json({
-          message: 'Month and year are required'
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
         })
       }
 
       const result = await pool.query(
         `SELECT *
          FROM budgets
+
          WHERE user_id = $1
          AND month = $2
          AND year = $3`,
@@ -418,7 +717,10 @@ app.get(
       res.json(result.rows[0])
 
     } catch (error) {
-      console.error('Error fetching budget:', error)
+      console.error(
+        'Error fetching budget:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -427,34 +729,68 @@ app.get(
   }
 )
 
-
-
+// SAVE BUDGET
 app.put(
   '/api/budget',
   authenticateToken,
   async (req, res) => {
     try {
-      const { amount, month, year } = req.body
+      const {
+        amount,
+        month,
+        year
+      } = req.body
 
-      if (!amount || !month || !year) {
+      const numericAmount = Number(amount)
+      const numericMonth = Number(month)
+      const numericYear = Number(year)
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
         return res.status(400).json({
-          message: 'Amount, month and year are required'
+          message:
+            'Budget must be greater than 0'
         })
       }
 
-      if (Number(amount) <= 0) {
-  return res.status(400).json({
-    message: 'Budget must be greater than 0'
-  })
-}
+      if (
+        !Number.isInteger(numericMonth) ||
+        numericMonth < 1 ||
+        numericMonth > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(numericYear) ||
+        numericYear < 2000 ||
+        numericYear > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
 
       const result = await pool.query(
         `INSERT INTO budgets
-           (user_id, amount, month, year)
+           (
+             user_id,
+             amount,
+             month,
+             year
+           )
 
          VALUES ($1, $2, $3, $4)
 
-         ON CONFLICT (user_id, month, year)
+         ON CONFLICT (
+           user_id,
+           month,
+           year
+         )
 
          DO UPDATE SET
            amount = EXCLUDED.amount
@@ -462,16 +798,19 @@ app.put(
          RETURNING *`,
         [
           req.user.userId,
-          amount,
-          month,
-          year
+          numericAmount,
+          numericMonth,
+          numericYear
         ]
       )
 
       res.json(result.rows[0])
 
     } catch (error) {
-      console.error('Error saving budget:', error)
+      console.error(
+        'Error saving budget:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -480,6 +819,9 @@ app.put(
   }
 )
 
+// ======================================================
+// ANALYTICS
+// ======================================================
 
 // GET 6-MONTH SPENDING TREND
 app.get(
@@ -491,66 +833,94 @@ app.get(
       const year = Number(req.query.year)
 
       if (
-        !month ||
-        !year ||
+        !Number.isInteger(month) ||
         month < 1 ||
         month > 12
       ) {
         return res.status(400).json({
-          message: 'Valid month and year are required'
+          message:
+            'Valid month and year are required'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message:
+            'Valid month and year are required'
         })
       }
 
       const result = await pool.query(
-  `WITH selected_period AS (
-     SELECT MAKE_DATE($2, $3, 1) AS selected_month
-   ),
+        `WITH selected_period AS (
+           SELECT
+             MAKE_DATE($2, $3, 1)
+             AS selected_month
+         ),
 
-   months AS (
-     SELECT generate_series(
-       selected_month - INTERVAL '5 months',
-       selected_month,
-       INTERVAL '1 month'
-     )::DATE AS month_start
+         months AS (
+           SELECT
+             generate_series(
+               selected_month
+                 - INTERVAL '5 months',
+               selected_month,
+               INTERVAL '1 month'
+             )::DATE AS month_start
 
-     FROM selected_period
-   ),
+           FROM selected_period
+         ),
 
-   monthly_spending AS (
-     SELECT
-       DATE_TRUNC('month', expense_date)::DATE AS month_start,
-       SUM(amount)::NUMERIC AS total
+         monthly_spending AS (
+           SELECT
+             DATE_TRUNC(
+               'month',
+               expense_date
+             )::DATE AS month_start,
 
-     FROM expenses
+             SUM(amount)::NUMERIC AS total
 
-     WHERE user_id = $1
+           FROM expenses
 
-     GROUP BY
-       DATE_TRUNC('month', expense_date)
-   )
+           WHERE user_id = $1
 
-   SELECT
-     EXTRACT(YEAR FROM months.month_start)::INTEGER AS year,
-     EXTRACT(MONTH FROM months.month_start)::INTEGER AS month,
+           GROUP BY
+             DATE_TRUNC(
+               'month',
+               expense_date
+             )
+         )
 
-     COALESCE(
-       monthly_spending.total,
-       0
-     )::NUMERIC AS total
+         SELECT
+           EXTRACT(
+             YEAR FROM months.month_start
+           )::INTEGER AS year,
 
-   FROM months
+           EXTRACT(
+             MONTH FROM months.month_start
+           )::INTEGER AS month,
 
-   LEFT JOIN monthly_spending
-     ON monthly_spending.month_start =
-        months.month_start
+           COALESCE(
+             monthly_spending.total,
+             0
+           )::NUMERIC AS total
 
-   ORDER BY months.month_start ASC`,
-  [
-    req.user.userId,
-    year,
-    month
-  ]
-)
+         FROM months
+
+         LEFT JOIN monthly_spending
+           ON monthly_spending.month_start =
+              months.month_start
+
+         ORDER BY
+           months.month_start ASC`,
+        [
+          req.user.userId,
+          year,
+          month
+        ]
+      )
 
       res.json(result.rows)
 
@@ -567,6 +937,9 @@ app.get(
   }
 )
 
+// ======================================================
+// SAVINGS GOALS
+// ======================================================
 
 // GET ALL SAVINGS GOALS
 app.get(
@@ -577,7 +950,9 @@ app.get(
       const result = await pool.query(
         `SELECT *
          FROM savings_goals
+
          WHERE user_id = $1
+
          ORDER BY created_at DESC`,
         [req.user.userId]
       )
@@ -585,7 +960,10 @@ app.get(
       res.json(result.rows)
 
     } catch (error) {
-      console.error('Error fetching savings goals:', error)
+      console.error(
+        'Error fetching savings goals:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -593,7 +971,6 @@ app.get(
     }
   }
 )
-
 
 // CREATE SAVINGS GOAL
 app.post(
@@ -607,15 +984,36 @@ app.post(
         targetDate
       } = req.body
 
-      if (!title || !targetAmount) {
+      const cleanTitle = title?.trim()
+      const numericTarget =
+        Number(targetAmount)
+
+      if (
+        !cleanTitle ||
+        cleanTitle.length > 100
+      ) {
         return res.status(400).json({
-          message: 'Title and target amount are required'
+          message:
+            'Goal title must be between 1 and 100 characters'
         })
       }
 
-      if (Number(targetAmount) <= 0) {
+      if (
+        !Number.isFinite(numericTarget) ||
+        numericTarget <= 0
+      ) {
         return res.status(400).json({
-          message: 'Target amount must be greater than 0'
+          message:
+            'Target amount must be greater than 0'
+        })
+      }
+
+      if (
+        targetDate &&
+        !isValidDateString(targetDate)
+      ) {
+        return res.status(400).json({
+          message: 'Invalid target date'
         })
       }
 
@@ -633,16 +1031,21 @@ app.post(
          RETURNING *`,
         [
           req.user.userId,
-          title.trim(),
-          Number(targetAmount),
+          cleanTitle,
+          numericTarget,
           targetDate || null
         ]
       )
 
-      res.status(201).json(result.rows[0])
+      res.status(201).json(
+        result.rows[0]
+      )
 
     } catch (error) {
-      console.error('Error creating savings goal:', error)
+      console.error(
+        'Error creating savings goal:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -659,27 +1062,52 @@ app.put(
     try {
       const id = Number(req.params.id)
 
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid savings goal ID'
+        })
+      }
+
       const {
         title,
         targetAmount,
         targetDate
       } = req.body
 
-      if (!Number.isInteger(id) || id <= 0) {
+      const cleanTitle = title?.trim()
+      const numericTarget =
+        Number(targetAmount)
+
+      if (
+        !cleanTitle ||
+        cleanTitle.length > 100
+      ) {
         return res.status(400).json({
-          message: 'Invalid savings goal ID'
+          message:
+            'Goal title must be between 1 and 100 characters'
         })
       }
 
-      if (!title || !targetAmount) {
+      if (
+        !Number.isFinite(numericTarget) ||
+        numericTarget <= 0
+      ) {
         return res.status(400).json({
-          message: 'Title and target amount are required'
+          message:
+            'Target amount must be greater than 0'
         })
       }
 
-      if (Number(targetAmount) <= 0) {
+      if (
+        targetDate &&
+        !isValidDateString(targetDate)
+      ) {
         return res.status(400).json({
-          message: 'Target amount must be greater than 0'
+          message: 'Invalid target date'
         })
       }
 
@@ -695,8 +1123,8 @@ app.put(
 
          RETURNING *`,
         [
-          title.trim(),
-          Number(targetAmount),
+          cleanTitle,
+          numericTarget,
           targetDate || null,
           id,
           req.user.userId
@@ -705,14 +1133,18 @@ app.put(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message: 'Savings goal not found'
+          message:
+            'Savings goal not found'
         })
       }
 
       res.json(result.rows[0])
 
     } catch (error) {
-      console.error('Error updating savings goal:', error)
+      console.error(
+        'Error updating savings goal:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -721,8 +1153,6 @@ app.put(
   }
 )
 
-
-
 // ADD MONEY TO SAVINGS GOAL
 app.patch(
   '/api/savings-goals/:id/add',
@@ -730,17 +1160,26 @@ app.patch(
   async (req, res) => {
     try {
       const id = Number(req.params.id)
-      const { amount } = req.body
+      const numericAmount =
+        Number(req.body.amount)
 
-      if (!Number.isInteger(id) || id <= 0) {
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
         return res.status(400).json({
-          message: 'Invalid savings goal ID'
+          message:
+            'Invalid savings goal ID'
         })
       }
 
-      if (!amount || Number(amount) <= 0) {
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
         return res.status(400).json({
-          message: 'Amount must be greater than 0'
+          message:
+            'Amount must be greater than 0'
         })
       }
 
@@ -755,7 +1194,7 @@ app.patch(
 
          RETURNING *`,
         [
-          Number(amount),
+          numericAmount,
           id,
           req.user.userId
         ]
@@ -763,14 +1202,18 @@ app.patch(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message: 'Savings goal not found'
+          message:
+            'Savings goal not found'
         })
       }
 
       res.json(result.rows[0])
 
     } catch (error) {
-      console.error('Error adding savings:', error)
+      console.error(
+        'Error adding savings:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -778,10 +1221,6 @@ app.patch(
     }
   }
 )
-
-
-
-
 
 // DELETE SAVINGS GOAL
 app.delete(
@@ -791,9 +1230,13 @@ app.delete(
     try {
       const id = Number(req.params.id)
 
-      if (!Number.isInteger(id) || id <= 0) {
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
         return res.status(400).json({
-          message: 'Invalid savings goal ID'
+          message:
+            'Invalid savings goal ID'
         })
       }
 
@@ -812,17 +1255,22 @@ app.delete(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message: 'Savings goal not found'
+          message:
+            'Savings goal not found'
         })
       }
 
       res.json({
-        message: 'Savings goal deleted successfully',
+        message:
+          'Savings goal deleted successfully',
         goal: result.rows[0]
       })
 
     } catch (error) {
-      console.error('Error deleting savings goal:', error)
+      console.error(
+        'Error deleting savings goal:',
+        error
+      )
 
       res.status(500).json({
         message: 'Server error'
@@ -831,6 +1279,9 @@ app.delete(
   }
 )
 
+// ======================================================
+// RECURRING EXPENSES
+// ======================================================
 
 // GET ALL RECURRING EXPENSES
 app.get(
@@ -841,7 +1292,9 @@ app.get(
       const result = await pool.query(
         `SELECT *
          FROM recurring_expenses
+
          WHERE user_id = $1
+
          ORDER BY next_due_date ASC`,
         [req.user.userId]
       )
@@ -861,7 +1314,6 @@ app.get(
   }
 )
 
-
 // CREATE RECURRING EXPENSE
 app.post(
   '/api/recurring-expenses',
@@ -876,46 +1328,68 @@ app.post(
         startDate
       } = req.body
 
+      const cleanTitle = title?.trim()
+      const numericAmount = Number(amount)
+
       if (
-        !title ||
-        !category ||
-        !amount ||
-        !frequency ||
-        !startDate
+        !cleanTitle ||
+        cleanTitle.length > 100
       ) {
         return res.status(400).json({
           message:
-            'Title, category, amount, frequency and start date are required'
-        })
-      }
-
-      if (Number(amount) <= 0) {
-        return res.status(400).json({
-          message: 'Amount must be greater than 0'
+            'Recurring expense title must be between 1 and 100 characters'
         })
       }
 
       if (
-        frequency !== 'monthly' &&
-        frequency !== 'yearly'
+        !allowedCategories.includes(category)
       ) {
         return res.status(400).json({
-          message: 'Invalid recurring frequency'
+          message:
+            'Invalid recurring expense category'
+        })
+      }
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Amount must be greater than 0'
+        })
+      }
+
+      if (
+        !allowedFrequencies.includes(
+          frequency
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid recurring frequency'
+        })
+      }
+
+      if (!isValidDateString(startDate)) {
+        return res.status(400).json({
+          message:
+            'A valid start date is required'
         })
       }
 
       const result = await pool.query(
         `INSERT INTO recurring_expenses
-         (
-           user_id,
-           title,
-           category,
-           amount,
-           frequency,
-           start_date,
-           billing_day,
-           next_due_date
-         )
+           (
+             user_id,
+             title,
+             category,
+             amount,
+             frequency,
+             start_date,
+             billing_day,
+             next_due_date
+           )
 
          VALUES (
            $1,
@@ -924,22 +1398,26 @@ app.post(
            $4,
            $5,
            $6,
-           EXTRACT(DAY FROM $6::DATE)::INTEGER,
+           EXTRACT(
+             DAY FROM $6::DATE
+           )::INTEGER,
            $6
          )
 
          RETURNING *`,
         [
           req.user.userId,
-          title.trim(),
+          cleanTitle,
           category,
-          Number(amount),
+          numericAmount,
           frequency,
           startDate
         ]
       )
 
-      res.status(201).json(result.rows[0])
+      res.status(201).json(
+        result.rows[0]
+      )
 
     } catch (error) {
       console.error(
@@ -962,6 +1440,16 @@ app.put(
     try {
       const id = Number(req.params.id)
 
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid recurring expense ID'
+        })
+      }
+
       const {
         title,
         category,
@@ -970,37 +1458,53 @@ app.put(
         startDate
       } = req.body
 
-      if (!Number.isInteger(id) || id <= 0) {
-        return res.status(400).json({
-          message: 'Invalid recurring expense ID'
-        })
-      }
+      const cleanTitle = title?.trim()
+      const numericAmount = Number(amount)
 
       if (
-        !title ||
-        !category ||
-        !amount ||
-        !frequency ||
-        !startDate
+        !cleanTitle ||
+        cleanTitle.length > 100
       ) {
         return res.status(400).json({
           message:
-            'Title, category, amount, frequency and start date are required'
-        })
-      }
-
-      if (Number(amount) <= 0) {
-        return res.status(400).json({
-          message: 'Amount must be greater than 0'
+            'Recurring expense title must be between 1 and 100 characters'
         })
       }
 
       if (
-        frequency !== 'monthly' &&
-        frequency !== 'yearly'
+        !allowedCategories.includes(category)
       ) {
         return res.status(400).json({
-          message: 'Invalid recurring frequency'
+          message:
+            'Invalid recurring expense category'
+        })
+      }
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Amount must be greater than 0'
+        })
+      }
+
+      if (
+        !allowedFrequencies.includes(
+          frequency
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid recurring frequency'
+        })
+      }
+
+      if (!isValidDateString(startDate)) {
+        return res.status(400).json({
+          message:
+            'A valid start date is required'
         })
       }
 
@@ -1008,22 +1512,24 @@ app.put(
         `UPDATE recurring_expenses
 
          SET title = $1,
-    category = $2,
-    amount = $3,
-    frequency = $4,
-    start_date = $5,
-    billing_day =
-      EXTRACT(DAY FROM $5::DATE)::INTEGER,
-    next_due_date = $5
+             category = $2,
+             amount = $3,
+             frequency = $4,
+             start_date = $5,
+             billing_day =
+               EXTRACT(
+                 DAY FROM $5::DATE
+               )::INTEGER,
+             next_due_date = $5
 
          WHERE id = $6
          AND user_id = $7
 
          RETURNING *`,
         [
-          title.trim(),
+          cleanTitle,
           category,
-          Number(amount),
+          numericAmount,
           frequency,
           startDate,
           id,
@@ -1033,7 +1539,8 @@ app.put(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message: 'Recurring expense not found'
+          message:
+            'Recurring expense not found'
         })
       }
 
@@ -1052,7 +1559,6 @@ app.put(
   }
 )
 
-
 // DELETE RECURRING EXPENSE
 app.delete(
   '/api/recurring-expenses/:id',
@@ -1061,16 +1567,22 @@ app.delete(
     try {
       const id = Number(req.params.id)
 
-      if (!Number.isInteger(id) || id <= 0) {
+      if (
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
         return res.status(400).json({
-          message: 'Invalid recurring expense ID'
+          message:
+            'Invalid recurring expense ID'
         })
       }
 
       const result = await pool.query(
         `DELETE FROM recurring_expenses
+
          WHERE id = $1
          AND user_id = $2
+
          RETURNING *`,
         [
           id,
@@ -1080,14 +1592,17 @@ app.delete(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message: 'Recurring expense not found'
+          message:
+            'Recurring expense not found'
         })
       }
 
       res.json({
         message:
           'Recurring expense deleted successfully',
-        recurringExpense: result.rows[0]
+
+        recurringExpense:
+          result.rows[0]
       })
 
     } catch (error) {
@@ -1103,35 +1618,40 @@ app.delete(
   }
 )
 
+// ======================================================
 // PROCESS DUE RECURRING EXPENSES
+// ======================================================
+
 app.post(
   '/api/recurring-expenses/process',
   authenticateToken,
   async (req, res) => {
-
     const client = await pool.connect()
 
     try {
       await client.query('BEGIN')
 
-      const recurringResult = await client.query(
-        `SELECT *
-         FROM recurring_expenses
+      const recurringResult =
+        await client.query(
+          `SELECT *
+           FROM recurring_expenses
 
-         WHERE user_id = $1
-         AND active = TRUE
-         AND next_due_date <= CURRENT_DATE
+           WHERE user_id = $1
+           AND active = TRUE
+           AND next_due_date <= CURRENT_DATE
 
-         ORDER BY next_due_date ASC
+           ORDER BY next_due_date ASC
 
-         FOR UPDATE`,
-        [req.user.userId]
-      )
+           FOR UPDATE`,
+          [req.user.userId]
+        )
 
       let generatedCount = 0
 
-      for (const recurring of recurringResult.rows) {
-
+      for (
+        const recurring
+        of recurringResult.rows
+      ) {
         let dueDate = new Date(
           `${recurring.next_due_date
             .toISOString()
@@ -1139,89 +1659,142 @@ app.post(
         )
 
         const today = new Date()
-
         today.setUTCHours(0, 0, 0, 0)
 
         while (dueDate <= today) {
-
           const dueDateString =
-            dueDate.toISOString().split('T')[0]
+            dueDate
+              .toISOString()
+              .split('T')[0]
 
-          const insertResult = await client.query(
-            `INSERT INTO expenses
-             (
-               user_id,
-               recurring_expense_id,
-               title,
-               category,
-               amount,
-               expense_date
-             )
+          const insertResult =
+            await client.query(
+              `INSERT INTO expenses
+                 (
+                   user_id,
+                   recurring_expense_id,
+                   title,
+                   category,
+                   amount,
+                   expense_date
+                 )
 
-             VALUES ($1, $2, $3, $4, $5, $6)
+               VALUES (
+                 $1,
+                 $2,
+                 $3,
+                 $4,
+                 $5,
+                 $6
+               )
 
-             ON CONFLICT (
-               recurring_expense_id,
-               expense_date
-             )
-             WHERE recurring_expense_id IS NOT NULL
+               ON CONFLICT (
+                 recurring_expense_id,
+                 expense_date
+               )
 
-             DO NOTHING
+               WHERE
+                 recurring_expense_id
+                 IS NOT NULL
 
-             RETURNING id`,
-            [
-              req.user.userId,
-              recurring.id,
-              recurring.title,
-              recurring.category,
-              recurring.amount,
-              dueDateString
-            ]
-          )
+               DO NOTHING
 
-        if (recurring.frequency === 'monthly') {
+               RETURNING id`,
+              [
+                req.user.userId,
+                recurring.id,
+                recurring.title,
+                recurring.category,
+                recurring.amount,
+                dueDateString
+              ]
+            )
 
-  const nextMonthFirstDay = new Date(
-    Date.UTC(
-      dueDate.getUTCFullYear(),
-      dueDate.getUTCMonth() + 1,
-      1
-    )
-  )
+          if (
+            insertResult.rows.length > 0
+          ) {
+            generatedCount += 1
+          }
 
-  const lastDayOfNextMonth =
-    new Date(
-      Date.UTC(
-        nextMonthFirstDay.getUTCFullYear(),
-        nextMonthFirstDay.getUTCMonth() + 1,
-        0
-      )
-    ).getUTCDate()
+          if (
+            recurring.frequency ===
+            'monthly'
+          ) {
+            const nextMonthFirstDay =
+              new Date(
+                Date.UTC(
+                  dueDate.getUTCFullYear(),
+                  dueDate.getUTCMonth() + 1,
+                  1
+                )
+              )
 
-  const safeDay = Math.min(
-    recurring.billing_day,
-    lastDayOfNextMonth
-  )
+            const lastDayOfNextMonth =
+              new Date(
+                Date.UTC(
+                  nextMonthFirstDay
+                    .getUTCFullYear(),
 
-  dueDate = new Date(
-    Date.UTC(
-      nextMonthFirstDay.getUTCFullYear(),
-      nextMonthFirstDay.getUTCMonth(),
-      safeDay
-    )
-  )
+                  nextMonthFirstDay
+                    .getUTCMonth() + 1,
 
-} else {
+                  0
+                )
+              ).getUTCDate()
 
-  dueDate.setUTCFullYear(
-    dueDate.getUTCFullYear() + 1
-  )
+            const safeDay = Math.min(
+              recurring.billing_day,
+              lastDayOfNextMonth
+            )
 
-}
+            dueDate = new Date(
+              Date.UTC(
+                nextMonthFirstDay
+                  .getUTCFullYear(),
+
+                nextMonthFirstDay
+                  .getUTCMonth(),
+
+                safeDay
+              )
+            )
+
+          } else {
+            const targetYear =
+              dueDate.getUTCFullYear() + 1
+
+            const targetMonth =
+              dueDate.getUTCMonth()
+
+            const targetDay =
+              recurring.billing_day
+
+            const lastDayOfTargetMonth =
+              new Date(
+                Date.UTC(
+                  targetYear,
+                  targetMonth + 1,
+                  0
+                )
+              ).getUTCDate()
+
+            dueDate = new Date(
+              Date.UTC(
+                targetYear,
+                targetMonth,
+                Math.min(
+                  targetDay,
+                  lastDayOfTargetMonth
+                )
+              )
+            )
+          }
         }
 
         const nextDueDate =
-          dueDate.toISOString().split('T')[0]
+          dueDate
+            .toISOString()
+            .split('T')[0]
 
         await client.query(
           `UPDATE recurring_expenses
@@ -1241,12 +1814,12 @@ app.post(
       await client.query('COMMIT')
 
       res.json({
-        message: 'Recurring expenses processed successfully',
+        message:
+          'Recurring expenses processed successfully',
         generatedCount
       })
 
     } catch (error) {
-
       await client.query('ROLLBACK')
 
       console.error(
@@ -1264,6 +1837,12 @@ app.post(
   }
 )
 
+// ======================================================
+// START SERVER
+// ======================================================
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+  console.log(
+    `Server running on port ${PORT}`
+  )
 })

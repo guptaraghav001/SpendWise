@@ -6,6 +6,8 @@ import {BarChart,Bar,LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,Responsive
 import DashboardHeader from '../components/DashboardHeader.jsx'
 
 import API_URL from '../config/api.js'
+
+import { handleApiResponse } from '../utils/handleApiResponse.js'
 import SavingsGoals from '../components/SavingsGoals.jsx'
 import RecurringExpenses from '../components/RecurringExpenses.jsx'
 import Sidebar from '../components/Sidebar.jsx'
@@ -53,6 +55,7 @@ const [activeSection, setActiveSection] = useState('dashboard')
 const [dashboardRefresh, setDashboardRefresh] = useState(0)
 
 
+const [savingExpense, setSavingExpense] = useState(false)
 
 
 const [savingsSummary, setSavingsSummary] = useState({
@@ -75,7 +78,7 @@ const processRecurringExpenses = async () => {
   const token = localStorage.getItem('token')
 
   try {
-    const response = await fetch(
+     const response = await fetch(
       `${API_URL}/api/recurring-expenses/process`,
       {
         method: 'POST',
@@ -85,15 +88,10 @@ const processRecurringExpenses = async () => {
       }
     )
 
-    if (!response.ok) {
-      throw new Error(
-        'Failed to process recurring expenses'
-      )
-    }
-
-    return await response.json()
-
-  } catch (error) {
+return await handleApiResponse(response)
+  } 
+  
+  catch (error) {
     console.error(
       'Recurring expense processing error:',
       error
@@ -143,22 +141,8 @@ useEffect(() => {
       }
     }
   )
-    .then(async (response) => {
-      if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
+    .then(handleApiResponse)
 
-        onLogout()
-
-        throw new Error('Your session has expired')
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to load expenses')
-      }
-
-      return response.json()
-    })
     .then((data) => {
       setExpenses(data)
     })
@@ -185,13 +169,8 @@ useEffect(() => {
       }
     }
   )
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to fetch budget')
-      }
+   .then(handleApiResponse)
 
-      return response.json()
-    })
     .then((data) => {
       setBudget(Number(data.amount) || 0)
     })
@@ -213,13 +192,8 @@ fetch(
       Authorization: `Bearer ${token}`
     }
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to fetch spending trend')
-      }
+   .then(handleApiResponse)
 
-      return response.json()
-    })
     .then((data) => {
       setTrendData(data)
     })
@@ -242,13 +216,9 @@ useEffect(() => {
       Authorization: `Bearer ${token}`
     }
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to load savings summary')
-      }
+   .then(handleApiResponse)
 
-      return response.json()
-    })
+
     .then((goals) => {
       const totalSaved = goals.reduce(
         (total, goal) =>
@@ -292,15 +262,8 @@ useEffect(() => {
       Authorization: `Bearer ${token}`
     }
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(
-          'Failed to load recurring summary'
-        )
-      }
+ .then(handleApiResponse)
 
-      return response.json()
-    })
     .then((items) => {
       const activeItems = items.filter(
         (item) => item.active
@@ -408,15 +371,27 @@ const largestExpense =
 
 const handleAddExpense = () => {
 
-  if (!title || !amount || !expenseDate) {
-  alert('Please enter title, amount and date')
-  return
-}
-
-  if (Number(amount) <= 0) {
-    alert('Amount must be greater than 0')
+  if (!title.trim()) {
+    alert('Please enter an expense title')
     return
   }
+
+  if (!amount || Number(amount) <= 0) {
+    alert('Please enter a valid amount greater than 0')
+    return
+  }
+
+  if (!category) {
+    alert('Please select a category')
+    return
+  }
+
+  if (!expenseDate) {
+    alert('Please select an expense date')
+    return
+  }
+
+  setSavingExpense(true)
 
   const newExpense = {
   title: title,
@@ -428,6 +403,8 @@ const handleAddExpense = () => {
 
   const token = localStorage.getItem('token')
 
+
+
 fetch(`${API_URL}/api/expenses`, {
   method: 'POST',
 
@@ -438,8 +415,9 @@ fetch(`${API_URL}/api/expenses`, {
 
     body: JSON.stringify(newExpense)
   })
-    .then((response) => response.json())
-    .then((createdExpense) => {
+.then(handleApiResponse)  
+
+.then((createdExpense) => {
 
 const createdDate = new Date(
   createdExpense.expense_date
@@ -469,11 +447,33 @@ setTrendRefresh((value) => value + 1)
     .catch((error) => {
       console.error('Error adding expense:', error)
     })
+    .finally(() => {
+  setSavingExpense(false)
+})
 }
 
 
 const handleDeleteExpense = (id) => {
 
+  if (!title.trim()) {
+  alert('Please enter an expense title')
+  return
+}
+
+if (!amount || Number(amount) <= 0) {
+  alert('Please enter a valid amount greater than 0')
+  return
+}
+
+if (!category) {
+  alert('Please select a category')
+  return
+}
+
+if (!expenseDate) {
+  alert('Please select an expense date')
+  return
+}
   const confirmDelete = window.confirm(
     'Are you sure you want to delete this expense?'
   )
@@ -488,14 +488,8 @@ const token = localStorage.getItem('token')
       Authorization: `Bearer ${token}`
     }
   })
-    .then((response) => {
+   .then(handleApiResponse)
 
-      if (!response.ok) {
-        throw new Error('Failed to delete expense')
-      }
-
-      return response.json()
-    })
     .then(() => {
 
       const updatedExpenses = expenses.filter(
@@ -525,17 +519,37 @@ const handleEditExpense = (expense) => {
   setShowForm(true)
 }
 
+
+
 const handleUpdateExpense = () => {
 
-  if (!title || !amount || !expenseDate) {
-  alert('Please enter title, amount and date')
-  return
-}
+  if (!title.trim()) {
+    alert('Please enter an expense title')
+    return
+  }
+
+  if (!amount || Number(amount) <= 0) {
+    alert('Please enter a valid amount greater than 0')
+    return
+  }
+
+  if (!category) {
+    alert('Please select a category')
+    return
+  }
+
+  if (!expenseDate) {
+    alert('Please select an expense date')
+    return
+  }
 
   if (Number(amount) <= 0) {
     alert('Amount must be greater than 0')
     return
   }
+
+  setSavingExpense(true)
+
 
   const updatedData = {
   title: title,
@@ -543,7 +557,6 @@ const handleUpdateExpense = () => {
   amount: Number(amount),
   expenseDate: expenseDate
 }
-
 
 const token = localStorage.getItem('token')
 
@@ -557,14 +570,9 @@ const token = localStorage.getItem('token')
 
     body: JSON.stringify(updatedData)
   })
-    .then((response) => {
 
-      if (!response.ok) {
-        throw new Error('Failed to update expense')
-      }
+   .then(handleApiResponse)
 
-      return response.json()
-    })
     .then((updatedExpense) => {
 
       const updatedExpenses = expenses.map((expense) =>
@@ -588,6 +596,10 @@ setTrendRefresh((value) => value + 1)
     .catch((error) => {
       console.error('Error updating expense:', error)
     })
+
+    .finally(() => {
+  setSavingExpense(false)
+})
 }
 
 const handleLogout = () => {
@@ -608,7 +620,13 @@ const handleSaveBudget = () => {
     return
   }
 
+
   const token = localStorage.getItem('token')
+
+  if (!budgetInput || Number(budgetInput) <= 0) {
+  alert('Please enter a valid budget greater than 0')
+  return
+}
 
   fetch(`${API_URL}/api/budget`, {
     method: 'PUT',
@@ -624,14 +642,7 @@ const handleSaveBudget = () => {
       year: selectedYear
     })
   })
-    .then((response) => {
-
-      if (!response.ok) {
-        throw new Error('Failed to save budget')
-      }
-
-      return response.json()
-    })
+   .then(handleApiResponse)
     .then((data) => {
 
 setBudget(Number(data.amount) || 0)      
@@ -897,6 +908,8 @@ onSectionChange={handleSectionChange}
   <input
     type="number"
     placeholder="Set budget"
+    min="0.01"
+step="0.01"
     value={budgetInput}
     onChange={(event) =>
       setBudgetInput(event.target.value)
@@ -1122,12 +1135,15 @@ onSectionChange={handleSectionChange}
     <input
       type="text"
       placeholder="Expense title"
+      maxLength={100}
       value={title}
       onChange={(event) => setTitle(event.target.value)}
     />
 
     <input
       type="number"
+      min="0.01"
+step="0.01"
       placeholder="Amount"
       value={amount}
       onChange={(event) => setAmount(event.target.value)}
@@ -1153,13 +1169,18 @@ onSectionChange={handleSectionChange}
     </select>
 
 <button
+  disabled={savingExpense}
   onClick={
     editingId
       ? handleUpdateExpense
       : handleAddExpense
   }
 >
-  {editingId ? 'Update Expense' : 'Add Expense'}
+  {savingExpense
+    ? 'Saving...'
+    : editingId
+      ? 'Update Expense'
+      : 'Add Expense'}
 </button>
   </div>
 )}

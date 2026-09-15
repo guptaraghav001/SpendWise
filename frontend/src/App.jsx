@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 
@@ -7,12 +7,37 @@ import LandingPage from './pages/LandingPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+
+
+
 function App() {
 const [page, setPage] = useState(() => {
   const token = localStorage.getItem('token')
 
   return token ? 'dashboard' : 'landing'
 })
+
+useEffect(() => {
+  const handleAuthExpired = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+
+    setPage('login')
+  }
+
+  window.addEventListener(
+    'auth-expired',
+    handleAuthExpired
+  )
+
+  return () => {
+    window.removeEventListener(
+      'auth-expired',
+      handleAuthExpired
+    )
+  }
+}, [])
+
   return (
     <div className="app">
 

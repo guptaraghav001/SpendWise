@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import API_URL from '../config/api.js'
-
+import { handleApiResponse } from '../utils/handleApiResponse.js'
 function SavingsGoals() {
   const [goals, setGoals] = useState([])
 
@@ -20,6 +20,9 @@ const [editTargetDate, setEditTargetDate] = useState('')
 
   const [loadingGoals, setLoadingGoals] = useState(true)
   const [goalError, setGoalError] = useState('')
+const [savingGoal, setSavingGoal] = useState(false)
+const [addingSavingsId, setAddingSavingsId] = useState(null)
+
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -29,13 +32,7 @@ const [editTargetDate, setEditTargetDate] = useState('')
         Authorization: `Bearer ${token}`
       }
     })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to load savings goals')
-        }
-
-        return response.json()
-      })
+   .then(handleApiResponse)
       .then((data) => {
         setGoals(data)
       })
@@ -47,6 +44,9 @@ const [editTargetDate, setEditTargetDate] = useState('')
       })
   }, [])
 
+
+
+
   const handleCreateGoal = () => {
     if (!goalTitle || !targetAmount) {
       alert('Please enter a goal title and target amount')
@@ -57,6 +57,7 @@ const [editTargetDate, setEditTargetDate] = useState('')
       alert('Target amount must be greater than 0')
       return
     }
+setSavingGoal(true)
 
     const token = localStorage.getItem('token')
 
@@ -74,13 +75,9 @@ const [editTargetDate, setEditTargetDate] = useState('')
         targetDate: targetDate || null
       })
     })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to create savings goal')
-        }
+    .then(handleApiResponse)
 
-        return response.json()
-      })
+
       .then((createdGoal) => {
         setGoals((currentGoals) => [
           createdGoal,
@@ -95,6 +92,9 @@ const [editTargetDate, setEditTargetDate] = useState('')
       .catch((error) => {
         setGoalError(error.message)
       })
+      .finally(() => {
+  setSavingGoal(false)
+})
   }
 
 
@@ -105,7 +105,7 @@ const handleAddSavings = (goalId) => {
     alert('Please enter a valid savings amount')
     return
   }
-
+setAddingSavingsId(goalId)
   const token = localStorage.getItem('token')
 
   fetch(`${API_URL}/api/savings-goals/${goalId}/add`, {
@@ -120,13 +120,8 @@ const handleAddSavings = (goalId) => {
       amount: amount
     })
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to add savings')
-      }
+ .then(handleApiResponse)
 
-      return response.json()
-    })
     .then((updatedGoal) => {
 
       setGoals((currentGoals) =>
@@ -145,6 +140,9 @@ const handleAddSavings = (goalId) => {
     .catch((error) => {
       setGoalError(error.message)
     })
+    .finally(() => {
+  setAddingSavingsId(null)
+})
 }
 
 const handleStartEdit = (goal) => {
@@ -179,7 +177,7 @@ const handleUpdateGoal = (goalId) => {
     alert('Target amount must be greater than 0')
     return
   }
-
+setSavingGoal(true)
   const token = localStorage.getItem('token')
 
   fetch(`${API_URL}/api/savings-goals/${goalId}`, {
@@ -196,13 +194,9 @@ const handleUpdateGoal = (goalId) => {
       targetDate: editTargetDate || null
     })
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to update savings goal')
-      }
+  
+.then(handleApiResponse)
 
-      return response.json()
-    })
     .then((updatedGoal) => {
 
       setGoals((currentGoals) =>
@@ -218,6 +212,9 @@ const handleUpdateGoal = (goalId) => {
     .catch((error) => {
       setGoalError(error.message)
     })
+    .finally(() => {
+  setSavingGoal(false)
+})
 }
 
 const handleDeleteGoal = (goalId) => {
@@ -239,13 +236,7 @@ const handleDeleteGoal = (goalId) => {
       Authorization: `Bearer ${token}`
     }
   })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('Failed to delete savings goal')
-      }
-
-      return response.json()
-    })
+ .then(handleApiResponse)
     .then(() => {
 
       setGoals((currentGoals) =>
@@ -364,9 +355,12 @@ const achievedGoals = goals.filter(
             }
           />
 
-          <button onClick={handleCreateGoal}>
-            Create Goal
-          </button>
+        <button
+  disabled={savingGoal}
+  onClick={handleCreateGoal}
+>
+  {savingGoal ? 'Creating...' : 'Create Goal'}
+</button>
 
         </div>
       )}
@@ -481,13 +475,16 @@ const isAchieved = saved >= target
     }
   />
 
-  <button
-    onClick={() =>
-      handleAddSavings(goal.id)
-    }
-  >
-    + Add Savings
-  </button>
+ <button
+  disabled={addingSavingsId === goal.id}
+  onClick={() =>
+    handleAddSavings(goal.id)
+  }
+>
+  {addingSavingsId === goal.id
+    ? 'Adding...'
+    : '+ Add Savings'}
+</button>
 
 </div>
 
@@ -522,13 +519,14 @@ const isAchieved = saved >= target
 
     <div className="edit-goal-actions">
 
-      <button
-        onClick={() =>
-          handleUpdateGoal(goal.id)
-        }
-      >
-        Save
-      </button>
+     <button
+  disabled={savingGoal}
+  onClick={() =>
+    handleUpdateGoal(goal.id)
+  }
+>
+  {savingGoal ? 'Saving...' : 'Save'}
+</button>
 
       <button onClick={handleCancelEdit}>
         Cancel
