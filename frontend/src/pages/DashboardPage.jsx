@@ -8,7 +8,7 @@ import DashboardHeader from '../components/DashboardHeader.jsx'
 import API_URL from '../config/api.js'
 import SavingsGoals from '../components/SavingsGoals.jsx'
 import RecurringExpenses from '../components/RecurringExpenses.jsx'
-
+import Sidebar from '../components/Sidebar.jsx'
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
 const [budgetInput, setBudgetInput] = useState('')
@@ -45,6 +45,30 @@ const [trendRefresh, setTrendRefresh] = useState(0)
 const [expenseRefresh, setExpenseRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
 const [error, setError] = useState('')
+
+
+
+const [activeSection, setActiveSection] = useState('dashboard')
+
+const [dashboardRefresh, setDashboardRefresh] = useState(0)
+
+
+
+
+const [savingsSummary, setSavingsSummary] = useState({
+  totalSaved: 0,
+  totalTarget: 0,
+  goalsCount: 0,
+  achievedCount: 0
+})
+
+const [recurringSummary, setRecurringSummary] = useState({
+  count: 0,
+  monthlyTotal: 0,
+  nextExpense: null
+})
+
+
 
 
 const processRecurringExpenses = async () => {
@@ -208,6 +232,112 @@ fetch(
 
 }, [trendRefresh, selectedMonth, selectedYear])
 
+
+
+useEffect(() => {
+  const token = localStorage.getItem('token')
+
+  fetch(`${API_URL}/api/savings-goals`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to load savings summary')
+      }
+
+      return response.json()
+    })
+    .then((goals) => {
+      const totalSaved = goals.reduce(
+        (total, goal) =>
+          total + Number(goal.saved_amount),
+        0
+      )
+
+      const totalTarget = goals.reduce(
+        (total, goal) =>
+          total + Number(goal.target_amount),
+        0
+      )
+
+      const achievedCount = goals.filter(
+        (goal) =>
+          Number(goal.saved_amount) >=
+          Number(goal.target_amount)
+      ).length
+
+      setSavingsSummary({
+        totalSaved,
+        totalTarget,
+        goalsCount: goals.length,
+        achievedCount
+      })
+    })
+    .catch((error) => {
+      console.error(
+        'Savings summary error:',
+        error
+      )
+    })
+
+}, [dashboardRefresh])
+
+useEffect(() => {
+  const token = localStorage.getItem('token')
+
+  fetch(`${API_URL}/api/recurring-expenses`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(
+          'Failed to load recurring summary'
+        )
+      }
+
+      return response.json()
+    })
+    .then((items) => {
+      const activeItems = items.filter(
+        (item) => item.active
+      )
+
+      const monthlyTotal = activeItems.reduce(
+        (total, item) => {
+          if (item.frequency === 'monthly') {
+            return total + Number(item.amount)
+          }
+
+          return total
+        },
+        0
+      )
+
+      const sorted = [...activeItems].sort(
+        (a, b) =>
+          new Date(a.next_due_date) -
+          new Date(b.next_due_date)
+      )
+
+      setRecurringSummary({
+        count: activeItems.length,
+        monthlyTotal,
+        nextExpense:
+          sorted.length > 0 ? sorted[0] : null
+      })
+    })
+    .catch((error) => {
+      console.error(
+        'Recurring summary error:',
+        error
+      )
+    })
+
+}, [dashboardRefresh])
 
 
       const spent = expenses.reduce(
@@ -699,12 +829,32 @@ const filteredExpenses = expenses
 }
 
 
+const handleSectionChange = (section) => {
+  setActiveSection(section)
+
+  if (section === 'dashboard') {
+    setDashboardRefresh(
+      (value) => value + 1
+    )
+  }
+}
 
   return (
+  <div className="app-layout">
 
-    <div className="dashboard">
+    <Sidebar
+      activeSection={activeSection}
+onSectionChange={handleSectionChange}
+      onLogout={handleLogout}
+    />
+
+    <main className="main-content">
+
+      <div className="dashboard">
+        
 <DashboardHeader
   user={user}
+  activeSection={activeSection}
   selectedMonth={selectedMonth}
   selectedYear={selectedYear}
   monthNames={monthNames}
@@ -713,7 +863,13 @@ const filteredExpenses = expenses
   onLogout={handleLogout}
 />
 
-      <div className="summary">
+
+
+
+{activeSection === 'dashboard' && (
+  <>
+
+    <div className="summary">
 
        <div className="summary-card">
 
@@ -763,7 +919,125 @@ const filteredExpenses = expenses
           <h2>₹{remaining}</h2>
         </div>
 
+         </div>
+
+
+
+<div className="dashboard-overview">
+
+  <div className="overview-card">
+
+    <p>Top Spending Category</p>
+
+    <h3>
+      {topCategory
+        ? topCategory[0]
+        : 'No spending yet'}
+    </h3>
+
+    {topCategory && (
+      <span>
+        ₹{formatCurrency(topCategory[1])}
+      </span>
+    )}
+
+  </div>
+
+
+  <div className="overview-card">
+
+    <p>Total Savings</p>
+
+    <h3>
+      ₹{formatCurrency(
+        savingsSummary.totalSaved
+      )}
+    </h3>
+
+    <span>
+      {savingsSummary.achievedCount}
+      {' of '}
+      {savingsSummary.goalsCount}
+      {' goals achieved'}
+    </span>
+
+  </div>
+
+
+  <div className="overview-card">
+
+    <p>Monthly Recurring</p>
+
+    <h3>
+      ₹{formatCurrency(
+        recurringSummary.monthlyTotal
+      )}
+    </h3>
+
+    <span>
+      {recurringSummary.count}
+      {' active recurring expenses'}
+    </span>
+
+  </div>
+
+</div>
+
+<div className="dashboard-next">
+
+  <h2>Upcoming Payment</h2>
+
+  {recurringSummary.nextExpense ? (
+    <div className="upcoming-payment">
+
+      <div>
+        <strong>
+          {recurringSummary.nextExpense.title}
+        </strong>
+
+        <p>
+          {recurringSummary.nextExpense.category}
+          {' • '}
+          {recurringSummary.nextExpense.frequency}
+        </p>
       </div>
+
+      <div>
+        <strong>
+          ₹{formatCurrency(
+            recurringSummary.nextExpense.amount
+          )}
+        </strong>
+
+        <p>
+          {new Date(
+            recurringSummary.nextExpense.next_due_date
+          ).toLocaleDateString(
+            'en-IN',
+            {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+            }
+          )}
+        </p>
+      </div>
+
+    </div>
+  ) : (
+    <p>No upcoming recurring expenses.</p>
+  )}
+
+</div>
+
+
+
+  </>
+)}
+
+
+
+{activeSection === 'transactions' && (
 
       <div className="transactions">
 
@@ -787,6 +1061,7 @@ const filteredExpenses = expenses
     + Add Expense
   </button>    
  </div>
+
 
 
 <div className="expense-filters">
@@ -924,6 +1199,7 @@ const filteredExpenses = expenses
 
 </div>
 
+
     <div>
       <strong>₹{expense.amount}</strong>
 
@@ -944,9 +1220,11 @@ const filteredExpenses = expenses
 ))}
 
 </div>
+  
+)}
 
-
-
+{activeSection === 'analytics' && (
+  <>
 <div className="analytics-summary">
 
   <div className="analytics-card">
@@ -1004,37 +1282,39 @@ const filteredExpenses = expenses
 
   <h2>Spending by Category</h2>
 
-{chartData.length > 0 && (
+  {chartData.length > 0 && (
+    <div className="chart-container">
 
-  <div className="chart-container">
+      <ResponsiveContainer
+        width="100%"
+        height={300}
+      >
 
-    <ResponsiveContainer
-      width="100%"
-      height={300}
-    >
+        <BarChart data={chartData}>
 
-      <BarChart data={chartData}>
+          <XAxis
+            dataKey="category"
+          />
 
-        <XAxis
-          dataKey="category"
-        />
+          <YAxis />
 
-        <YAxis />
+          <Tooltip />
 
-        <Tooltip />
+          <Bar
+            dataKey="amount"
+            fill="#646cff"
+          />
 
-        <Bar
-          dataKey="amount"
-          fill="#646cff"
-        />
+        </BarChart>
 
-      </BarChart>
+      </ResponsiveContainer>
 
-    </ResponsiveContainer>
+    </div>
+    
+  )}
 
-  </div>
+</div>
 
-)}
 
 <div className="trend-analytics">
 
@@ -1111,6 +1391,7 @@ const filteredExpenses = expenses
 
 </div>
 
+<div className="category-breakdown">
   {Object.entries(categoryTotals).length === 0 ? (
     <p>No spending data for this month.</p>
   ) : (
@@ -1135,13 +1416,22 @@ const filteredExpenses = expenses
       )
     })
   )}
-
 </div>
-<SavingsGoals />
-<RecurringExpenses />
-      </div>
-    
-  )
+
+  </>
+)}
+
+{activeSection === 'savings' && (
+  <SavingsGoals />
+)}
+{activeSection === 'recurring' && (
+  <RecurringExpenses />
+)}      </div>
+    </main>
+
+  </div>
+)
+
 }
 
 export default DashboardPage

@@ -1007,7 +1007,7 @@ app.put(
       const result = await pool.query(
         `UPDATE recurring_expenses
 
-         SSET title = $1,
+         SET title = $1,
     category = $2,
     amount = $3,
     frequency = $4,
