@@ -78,6 +78,22 @@ function Sidebar({
           Recurring
         </button>
 
+<button
+  className={
+    activeSection === 'insights'
+      ? 'active'
+      : ''
+  }
+  onClick={() =>
+    onSectionChange('insights')
+  }
+>
+  Insights
+</button>
+
+
+
+
       </nav>
 
       <button
@@ -86,6 +102,8 @@ function Sidebar({
       >
         Logout
       </button>
+
+
 
     </aside>
   )

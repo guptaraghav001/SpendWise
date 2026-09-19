@@ -937,6 +937,135 @@ app.get(
   }
 )
 
+// GET CATEGORY SPENDING COMPARISON
+app.get(
+  '/api/analytics/category-comparison',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
+      const result = await pool.query(
+        `WITH selected_period AS (
+           SELECT MAKE_DATE($2, $3, 1)
+             AS current_month
+         ),
+
+         category_list AS (
+           SELECT DISTINCT category
+           FROM expenses
+           WHERE user_id = $1
+         ),
+
+         current_totals AS (
+           SELECT
+             category,
+             SUM(amount)::NUMERIC AS total
+
+           FROM expenses,
+                selected_period
+
+           WHERE user_id = $1
+
+           AND expense_date >=
+             current_month
+
+           AND expense_date <
+             current_month
+             + INTERVAL '1 month'
+
+           GROUP BY category
+         ),
+
+         previous_totals AS (
+           SELECT
+             category,
+             SUM(amount)::NUMERIC AS total
+
+           FROM expenses,
+                selected_period
+
+           WHERE user_id = $1
+
+           AND expense_date >=
+             current_month
+             - INTERVAL '1 month'
+
+           AND expense_date <
+             current_month
+
+           GROUP BY category
+         )
+
+         SELECT
+           category_list.category,
+
+           COALESCE(
+             current_totals.total,
+             0
+           )::NUMERIC AS current_total,
+
+           COALESCE(
+             previous_totals.total,
+             0
+           )::NUMERIC AS previous_total
+
+         FROM category_list
+
+         LEFT JOIN current_totals
+           ON current_totals.category =
+              category_list.category
+
+         LEFT JOIN previous_totals
+           ON previous_totals.category =
+              category_list.category
+
+         ORDER BY
+           current_total DESC`,
+        [
+          req.user.userId,
+          year,
+          month
+        ]
+      )
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error(
+        'Error fetching category comparison:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
 // ======================================================
 // SAVINGS GOALS
 // ======================================================

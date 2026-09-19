@@ -49,6 +49,12 @@ const [expenseRefresh, setExpenseRefresh] = useState(0)
 const [error, setError] = useState('')
 
 
+const [
+  categoryComparison,
+
+
+  setCategoryComparison
+] = useState([])
 
 const [activeSection, setActiveSection] = useState('dashboard')
 
@@ -146,16 +152,19 @@ useEffect(() => {
     .then((data) => {
       setExpenses(data)
     })
-    .catch((error) => {
-      if (error.message !== 'Your session has expired') {
-        setError(error.message)
-      }
-    })
+ .catch((error) => {
+  if (
+    error.message !==
+    'Your session has expired. Please log in again.'
+  ) {
+    setError(error.message)
+  }
+})
     .finally(() => {
       setLoading(false)
     })
 
-}, [selectedMonth, selectedYear, onLogout])
+}, [selectedMonth, selectedYear, expenseRefresh])
 
 
 useEffect(() => {
@@ -181,6 +190,34 @@ useEffect(() => {
 
 }, [selectedMonth, selectedYear ,expenseRefresh])
 
+
+useEffect(() => {
+  const token = localStorage.getItem('token')
+
+  fetch(
+    `${API_URL}/api/analytics/category-comparison?month=${selectedMonth}&year=${selectedYear}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  )
+    .then(handleApiResponse)
+    .then((data) => {
+      setCategoryComparison(data)
+    })
+    .catch((error) => {
+      console.error(
+        'Category comparison error:',
+        error
+      )
+    })
+
+}, [
+  selectedMonth,
+  selectedYear,
+  trendRefresh
+])
 
 useEffect(() => {
   const token = localStorage.getItem('token')
@@ -316,7 +353,125 @@ useEffect(() => {
     ? Math.min((spent / budget) * 100, 100)
     : 0
 
+    const getBudgetStatus = () => {
+  if (budget <= 0) {
+    return null
+  }
 
+  const actualPercentage =
+    (spent / budget) * 100
+
+  if (actualPercentage >= 100) {
+    return {
+      type: 'danger',
+      title: 'Budget exceeded',
+      message: `You are ₹${formatCurrency(
+        spent - budget
+      )} over your monthly budget.`
+    }
+  }
+
+  if (actualPercentage >= 80) {
+    return {
+      type: 'warning',
+      title: 'Near budget limit',
+      message: `${actualPercentage.toFixed(
+        1
+      )}% of your budget has been used.`
+    }
+  }
+
+  if (actualPercentage >= 50) {
+    return {
+      type: 'caution',
+      title: 'Watch your spending',
+      message: `${actualPercentage.toFixed(
+        1
+      )}% of your budget has been used.`
+    }
+  }
+
+  return {
+    type: 'safe',
+    title: 'Spending on track',
+    message: `${actualPercentage.toFixed(
+      1
+    )}% of your budget has been used.`
+  }
+}
+
+const budgetStatus = getBudgetStatus()
+
+const getSpendingPace = () => {
+  if (budget <= 0) {
+    return null
+  }
+
+  const now = new Date()
+
+  const currentMonth = now.getMonth() + 1
+  const currentYear = now.getFullYear()
+
+  if (
+    selectedMonth !== currentMonth ||
+    selectedYear !== currentYear
+  ) {
+    return null
+  }
+
+  const daysInMonth = new Date(
+    selectedYear,
+    selectedMonth,
+    0
+  ).getDate()
+
+  const currentDay = now.getDate()
+
+  const monthElapsedPercentage =
+    (currentDay / daysInMonth) * 100
+
+  const budgetUsed =
+    (spent / budget) * 100
+
+  const paceDifference =
+    budgetUsed - monthElapsedPercentage
+
+  if (paceDifference >= 20) {
+    return {
+      type: 'danger',
+      title: 'Spending much faster than planned',
+      message: `You've used ${budgetUsed.toFixed(
+        1
+      )}% of your budget while ${monthElapsedPercentage.toFixed(
+        1
+      )}% of the month has passed.`
+    }
+  }
+
+  if (paceDifference >= 10) {
+    return {
+      type: 'warning',
+      title: 'Spending slightly ahead of pace',
+      message: `You've used ${budgetUsed.toFixed(
+        1
+      )}% of your budget while ${monthElapsedPercentage.toFixed(
+        1
+      )}% of the month has passed.`
+    }
+  }
+
+  return {
+    type: 'safe',
+    title: 'Spending pace looks comfortable',
+    message: `You've used ${budgetUsed.toFixed(
+      1
+    )}% of your budget with ${monthElapsedPercentage.toFixed(
+      1
+    )}% of the month completed.`
+  }
+}
+
+const spendingPace = getSpendingPace()
 const categoryTotals = expenses.reduce(
   (totals, expense) => {
 
@@ -454,26 +609,6 @@ setTrendRefresh((value) => value + 1)
 
 
 const handleDeleteExpense = (id) => {
-
-  if (!title.trim()) {
-  alert('Please enter an expense title')
-  return
-}
-
-if (!amount || Number(amount) <= 0) {
-  alert('Please enter a valid amount greater than 0')
-  return
-}
-
-if (!category) {
-  alert('Please select a category')
-  return
-}
-
-if (!expenseDate) {
-  alert('Please select an expense date')
-  return
-}
   const confirmDelete = window.confirm(
     'Are you sure you want to delete this expense?'
   )
@@ -481,29 +616,35 @@ if (!expenseDate) {
   if (!confirmDelete) {
     return
   }
-const token = localStorage.getItem('token')
+
+  const token = localStorage.getItem('token')
+
   fetch(`${API_URL}/api/expenses/${id}`, {
     method: 'DELETE',
+
     headers: {
       Authorization: `Bearer ${token}`
     }
   })
-   .then(handleApiResponse)
-
+    .then(handleApiResponse)
     .then(() => {
-
-      const updatedExpenses = expenses.filter(
-        (expense) => expense.id !== id
+      setExpenses((currentExpenses) =>
+        currentExpenses.filter(
+          (expense) => expense.id !== id
+        )
       )
 
-      setExpenses(updatedExpenses)
-      setTrendRefresh(trendRefresh + 1)
+      setTrendRefresh(
+        (value) => value + 1
+      )
     })
     .catch((error) => {
-      console.error('Error deleting expense:', error)
+      console.error(
+        'Error deleting expense:',
+        error
+      )
     })
 }
-
 
 const handleEditExpense = (expense) => {
   setEditingId(expense.id)
@@ -610,18 +751,18 @@ const handleLogout = () => {
 }
 
 const handleSaveBudget = () => {
-  if (!budgetInput) {
-    alert('Please enter a budget amount')
+  if (
+    !budgetInput ||
+    Number(budgetInput) <= 0
+  ) {
+    alert(
+      'Please enter a valid budget greater than 0'
+    )
     return
   }
 
-  if (Number(budgetInput) <= 0) {
-    alert('Budget amount must be greater than 0')
-    return
-  }
-
-
-  const token = localStorage.getItem('token')
+  const token =
+    localStorage.getItem('token')
 
   if (!budgetInput || Number(budgetInput) <= 0) {
   alert('Please enter a valid budget greater than 0')
@@ -850,7 +991,314 @@ const handleSectionChange = (section) => {
   }
 }
 
+const categoryChanges =
+  categoryComparison.map((item) => {
+    const current =
+      Number(item.current_total)
+
+    const previous =
+      Number(item.previous_total)
+
+    const difference =
+      current - previous
+
+    let percentageChange = null
+
+    if (previous > 0) {
+      percentageChange =
+        (difference / previous) * 100
+    }
+
+    return {
+      category: item.category,
+      current,
+      previous,
+      difference,
+      percentageChange
+    }
+  })
+
+const biggestCategoryChange =
+  categoryChanges
+    .filter(
+      (item) => item.difference !== 0
+    )
+    .sort(
+      (a, b) =>
+        Math.abs(b.difference) -
+        Math.abs(a.difference)
+    )[0] || null
+
+
+const savingsProgress =
+  savingsSummary.totalTarget > 0
+    ? (
+        savingsSummary.totalSaved /
+        savingsSummary.totalTarget
+      ) * 100
+    : 0
+
+const savingsRemaining = Math.max(
+  savingsSummary.totalTarget -
+    savingsSummary.totalSaved,
+  0
+)
+
+const getSavingsInsight = () => {
+  if (savingsSummary.goalsCount === 0) {
+    return null
+  }
+
+  if (
+    savingsSummary.achievedCount ===
+    savingsSummary.goalsCount
+  ) {
+    return {
+      type: 'success',
+      title: 'All savings goals achieved',
+      message:
+        'You have completed all of your current savings goals.'
+    }
+  }
+
+  if (savingsProgress >= 75) {
+    return {
+      type: 'strong',
+      title: 'Savings goals are close',
+      message:
+        `You have completed ${savingsProgress.toFixed(
+          1
+        )}% of your combined savings targets.`
+    }
+  }
+
+  if (savingsProgress >= 40) {
+    return {
+      type: 'steady',
+      title: 'Savings are progressing',
+      message:
+        `You have completed ${savingsProgress.toFixed(
+          1
+        )}% of your combined savings targets.`
+    }
+  }
+
+
+  const getUpcomingPaymentAlert = () => {
+  if (!recurringSummary.nextExpense) {
+    return null
+  }
+
+  const dueDate = new Date(
+    recurringSummary.nextExpense.next_due_date
+  )
+
+  const today = new Date()
+
+  dueDate.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+
+  const millisecondsPerDay =
+    1000 * 60 * 60 * 24
+
+  const daysUntilDue = Math.round(
+    (dueDate - today) / millisecondsPerDay
+  )
+
+  if (daysUntilDue < 0) {
+    return {
+      type: 'danger',
+      label: `Overdue by ${Math.abs(
+        daysUntilDue
+      )} ${
+        Math.abs(daysUntilDue) === 1
+          ? 'day'
+          : 'days'
+      }`
+    }
+  }
+
+  if (daysUntilDue === 0) {
+    return {
+      type: 'danger',
+      label: 'Due today'
+    }
+  }
+
+  if (daysUntilDue === 1) {
+    return {
+      type: 'warning',
+      label: 'Due tomorrow'
+    }
+  }
+
+  if (daysUntilDue <= 7) {
+    return {
+      type: 'warning',
+      label: `Due in ${daysUntilDue} days`
+    }
+  }
+
+  return {
+    type: 'normal',
+    label: `Due in ${daysUntilDue} days`
+  }
+}
+
+const upcomingPaymentAlert =
+  getUpcomingPaymentAlert()
+
+
+  return {
+    type: 'starting',
+    title: 'Savings goals are getting started',
+    message:
+      `You have completed ${savingsProgress.toFixed(
+        1
+      )}% of your combined savings targets.`
+  }
+}
+
+const savingsInsight = getSavingsInsight()
+
+const getUpcomingPaymentAlert = () => {
+  if (!recurringSummary.nextExpense) {
+    return null
+  }
+
+  const dueDate = new Date(
+    recurringSummary.nextExpense.next_due_date
+  )
+
+  const today = new Date()
+
+  dueDate.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+
+  const millisecondsPerDay =
+    1000 * 60 * 60 * 24
+
+  const daysUntilDue = Math.round(
+    (dueDate - today) / millisecondsPerDay
+  )
+
+  if (daysUntilDue < 0) {
+    const overdueDays =
+      Math.abs(daysUntilDue)
+
+    return {
+      type: 'danger',
+      label: `Overdue by ${overdueDays} ${
+        overdueDays === 1
+          ? 'day'
+          : 'days'
+      }`
+    }
+  }
+
+  if (daysUntilDue === 0) {
+    return {
+      type: 'danger',
+      label: 'Due today'
+    }
+  }
+
+  if (daysUntilDue === 1) {
+    return {
+      type: 'warning',
+      label: 'Due tomorrow'
+    }
+  }
+
+  if (daysUntilDue <= 7) {
+    return {
+      type: 'warning',
+      label: `Due in ${daysUntilDue} days`
+    }
+  }
+
+  return {
+    type: 'normal',
+    label: `Due in ${daysUntilDue} days`
+  }
+}
+
+const upcomingPaymentAlert =
+  getUpcomingPaymentAlert()
+
+
+const getFinancialOverview = () => {
+  if (budget <= 0) {
+    return {
+      type: 'neutral',
+      title: 'Budget needed',
+      message:
+        'Set a monthly budget to enable a fuller financial overview.'
+    }
+  }
+
+  const budgetUsage =
+    (spent / budget) * 100
+
+  if (budgetUsage >= 100) {
+    return {
+      type: 'danger',
+      title: 'Budget exceeded',
+      message:
+        'Your spending has exceeded the budget set for this month.'
+    }
+  }
+
+  if (
+    spendingPace?.type === 'danger'
+  ) {
+    return {
+      type: 'warning',
+      title: 'Spending pace is high',
+      message:
+        'Your spending is currently progressing faster than the month.'
+    }
+  }
+
+  if (
+    budgetUsage >= 80 ||
+    spendingPace?.type === 'warning'
+  ) {
+    return {
+      type: 'caution',
+      title: 'Keep an eye on spending',
+      message:
+        'Your budget usage or spending pace is approaching its warning range.'
+    }
+  }
+
+  return {
+    type: 'stable',
+    title: 'Current indicators are stable',
+    message:
+      'Your current budget usage and spending pace are within the app’s normal ranges.'
+  }
+}
+
+const financialOverview =
+  getFinancialOverview()
+
+
+const importantInsightCount = [
+  financialOverview.type === 'danger' ||
+  financialOverview.type === 'warning' ||
+  financialOverview.type === 'caution',
+
+  spendingPace?.type === 'danger' ||
+  spendingPace?.type === 'warning',
+
+  upcomingPaymentAlert?.type === 'danger' ||
+  upcomingPaymentAlert?.type === 'warning'
+].filter(Boolean).length
+
+
   return (
+    
   <div className="app-layout">
 
     <Sidebar
@@ -886,7 +1334,9 @@ onSectionChange={handleSectionChange}
 
   <p>Monthly Budget</p>
 
+
   <h2>₹{budget}</h2>
+
 <div className="budget-progress">
 
   <div
@@ -904,6 +1354,19 @@ onSectionChange={handleSectionChange}
     : 'No budget set'}
 </p>
 
+{budgetStatus && (
+  <div
+    className={`budget-status budget-status-${budgetStatus.type}`}
+  >
+    <strong>
+      {budgetStatus.title}
+    </strong>
+
+    <span>
+      {budgetStatus.message}
+    </span>
+  </div>
+)}
 
   <input
     type="number"
@@ -939,7 +1402,6 @@ step="0.01"
 <div className="dashboard-overview">
 
   <div className="overview-card">
-
     <p>Top Spending Category</p>
 
     <h3>
@@ -953,12 +1415,10 @@ step="0.01"
         ₹{formatCurrency(topCategory[1])}
       </span>
     )}
-
   </div>
 
 
   <div className="overview-card">
-
     <p>Total Savings</p>
 
     <h3>
@@ -973,12 +1433,10 @@ step="0.01"
       {savingsSummary.goalsCount}
       {' goals achieved'}
     </span>
-
   </div>
 
 
   <div className="overview-card">
-
     <p>Monthly Recurring</p>
 
     <h3>
@@ -991,10 +1449,168 @@ step="0.01"
       {recurringSummary.count}
       {' active recurring expenses'}
     </span>
-
   </div>
 
 </div>
+
+
+<div
+  className={`financial-overview financial-overview-${financialOverview.type}`}
+>
+  <div>
+    <p>Financial Overview</p>
+
+    <strong>
+      {financialOverview.title}
+    </strong>
+
+    <span>
+      {financialOverview.message}
+    </span>
+  </div>
+
+  <div className="financial-overview-stats">
+
+    <span>
+      Budget used
+      <strong>
+        {budget > 0
+          ? `${((spent / budget) * 100).toFixed(1)}%`
+          : '—'}
+      </strong>
+    </span>
+
+    <span>
+      Savings progress
+      <strong>
+        {savingsSummary.goalsCount > 0
+          ? `${savingsProgress.toFixed(1)}%`
+          : '—'}
+      </strong>
+    </span>
+
+    <span>
+      Active recurring
+      <strong>
+        {recurringSummary.count}
+      </strong>
+    </span>
+
+  </div>
+</div>
+
+
+
+{spendingPace && (
+  <div
+    className={`insight-item insight-item-${spendingPace.type}`}
+  >
+    <p>Spending Pace</p>
+
+    <strong>
+      {spendingPace.title}
+    </strong>
+
+    <span>
+      {spendingPace.message}
+    </span>
+  </div>
+)}
+
+
+{biggestCategoryChange && (
+  <div className="category-insight">
+
+    <p>Category Insight</p>
+
+    <strong>
+      {biggestCategoryChange.category}
+    </strong>
+
+    <span>
+      {biggestCategoryChange.difference > 0
+        ? `Spending increased by ₹${formatCurrency(
+            biggestCategoryChange.difference
+          )} compared with last month.`
+        : `Spending decreased by ₹${formatCurrency(
+            Math.abs(
+              biggestCategoryChange.difference
+            )
+          )} compared with last month.`}
+    </span>
+
+    {biggestCategoryChange.percentageChange !== null && (
+      <small>
+        {biggestCategoryChange.percentageChange >= 0
+          ? '↑'
+          : '↓'}
+        {' '}
+        {Math.abs(
+          biggestCategoryChange.percentageChange
+        ).toFixed(1)}
+        % month over month
+      </small>
+    )}
+
+  </div>
+)}
+
+
+{savingsInsight && (
+  <div
+    className={`savings-insight savings-insight-${savingsInsight.type}`}
+  >
+
+    <div className="savings-insight-header">
+
+      <div>
+        <p>Savings Progress</p>
+
+        <strong>
+          {savingsInsight.title}
+        </strong>
+      </div>
+
+      <strong>
+        {savingsProgress.toFixed(1)}%
+      </strong>
+
+    </div>
+
+
+    <div className="savings-insight-progress">
+
+      <div
+        className="savings-insight-progress-fill"
+        style={{
+          width: `${Math.min(
+            savingsProgress,
+            100
+          )}%`
+        }}
+      />
+
+    </div>
+
+
+    <span>
+      {savingsInsight.message}
+    </span>
+
+
+    {savingsRemaining > 0 && (
+      <small>
+        ₹{formatCurrency(savingsRemaining)}
+        {' remaining across your goals'}
+      </small>
+    )}
+
+  </div>
+)}
+
+
+
+
 
 <div className="dashboard-next">
 
@@ -1015,26 +1631,36 @@ step="0.01"
         </p>
       </div>
 
-      <div>
-        <strong>
-          ₹{formatCurrency(
-            recurringSummary.nextExpense.amount
-          )}
-        </strong>
+     <div className="upcoming-payment-details">
 
-        <p>
-          {new Date(
-            recurringSummary.nextExpense.next_due_date
-          ).toLocaleDateString(
-            'en-IN',
-            {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric'
-            }
-          )}
-        </p>
-      </div>
+  <strong>
+    ₹{formatCurrency(
+      recurringSummary.nextExpense.amount
+    )}
+  </strong>
+
+  <p>
+    {new Date(
+      recurringSummary.nextExpense.next_due_date
+    ).toLocaleDateString(
+      'en-IN',
+      {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }
+    )}
+  </p>
+
+  {upcomingPaymentAlert && (
+    <span
+      className={`payment-alert payment-alert-${upcomingPaymentAlert.type}`}
+    >
+      {upcomingPaymentAlert.label}
+    </span>
+  )}
+
+</div>
 
     </div>
   ) : (
@@ -1199,45 +1825,29 @@ step="0.01"
   )}
 
 {filteredExpenses.map((expense) => (
-    <div className="transaction" key={expense.id}>
+   <div className="transaction-actions">
 
-    <div>
-  <strong>{expense.title}</strong>
+  <strong>
+    ₹{expense.amount}
+  </strong>
 
-  <p>{expense.category}</p>
-
-  <small>
-  {new Date(expense.expense_date).toLocaleDateString(
-    'en-IN',
-    {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
+  <button
+    onClick={() =>
+      handleEditExpense(expense)
     }
-  )}
-</small>
+  >
+    Edit
+  </button>
 
+  <button
+    onClick={() =>
+      handleDeleteExpense(expense.id)
+    }
+  >
+    Delete
+  </button>
 
 </div>
-
-
-    <div>
-      <strong>₹{expense.amount}</strong>
-
-<button
-  onClick={() => handleEditExpense(expense)}
->
-  Edit
-</button>
-
-      <button
-        onClick={() => handleDeleteExpense(expense.id)}
-      >
-        Delete
-      </button>
-    </div>
-
-  </div>
 ))}
 
 </div>
@@ -1447,7 +2057,131 @@ step="0.01"
 )}
 {activeSection === 'recurring' && (
   <RecurringExpenses />
-)}      </div>
+)} 
+
+{activeSection === 'insights' && (
+  <div className="insights-section">
+
+  <div className="insights-header">
+
+  <div>
+    <h2>Financial Insights</h2>
+
+    <p>
+      Important updates based on your current
+      spending, budget and financial goals.
+    </p>
+  </div>
+
+  <span className="insight-count">
+    {importantInsightCount > 0
+      ? `${importantInsightCount} ${
+          importantInsightCount === 1
+            ? 'alert'
+            : 'alerts'
+        }`
+      : 'No urgent alerts'}
+  </span>
+
+</div>
+
+    <div className="insights-list">
+
+     <div
+  className={`insight-item insight-item-${financialOverview.type}`}
+>
+
+        <strong>
+          {financialOverview.title}
+        </strong>
+
+        <span>
+          {financialOverview.message}
+        </span>
+      </div>
+
+
+      {spendingPace && (
+        <div className="insight-item">
+          <p>Spending Pace</p>
+
+          <strong>
+            {spendingPace.title}
+          </strong>
+
+          <span>
+            {spendingPace.message}
+          </span>
+        </div>
+      )}
+
+
+      {biggestCategoryChange && (
+        <div className="insight-item">
+          <p>Category Change</p>
+
+          <strong>
+            {biggestCategoryChange.category}
+          </strong>
+
+          <span>
+            {biggestCategoryChange.difference > 0
+              ? `Spending increased by ₹${formatCurrency(
+                  biggestCategoryChange.difference
+                )} compared with last month.`
+              : `Spending decreased by ₹${formatCurrency(
+                  Math.abs(
+                    biggestCategoryChange.difference
+                  )
+                )} compared with last month.`}
+          </span>
+        </div>
+      )}
+
+
+      {savingsInsight && (
+        <div className="insight-item">
+          <p>Savings</p>
+
+          <strong>
+            {savingsInsight.title}
+          </strong>
+
+          <span>
+            {savingsInsight.message}
+          </span>
+        </div>
+      )}
+
+
+   {upcomingPaymentAlert &&
+  recurringSummary.nextExpense && (
+    <div
+      className={`insight-item insight-item-${upcomingPaymentAlert.type}`}
+    >
+            <p>Upcoming Payment</p>
+
+            <strong>
+              {recurringSummary.nextExpense.title}
+            </strong>
+
+            <span>
+              ₹{formatCurrency(
+                recurringSummary.nextExpense.amount
+              )}
+              {' • '}
+              {upcomingPaymentAlert.label}
+            </span>
+
+          </div>
+        )}
+
+    </div>
+
+  </div>
+)}
+
+     </div>
     </main>
 
   </div>

@@ -33,6 +33,11 @@ function DashboardHeader({
   recurring: {
     title: 'Recurring Expenses',
     subtitle: 'Manage expenses that repeat automatically'
+  },
+
+  insights: {
+    title: 'Insights',
+    subtitle: 'Get actionable insights about your finances'
   }
 }
 
