@@ -2,6 +2,7 @@ function DashboardOverview({
   budget,
   spent,
   remaining,
+  topCategoryBudgetAlert,
   budgetInput,
   setBudgetInput,
   budgetUsedPercentage,
@@ -176,6 +177,8 @@ function DashboardOverview({
       </div>
 
 
+
+
       {/* =========================
           FINANCIAL OVERVIEW
           ========================= */}
@@ -233,6 +236,46 @@ function DashboardOverview({
         </div>
       </div>
 
+
+{topCategoryBudgetAlert && (
+  <div
+    className={`category-budget-dashboard-alert category-budget-dashboard-alert-${topCategoryBudgetAlert.type}`}
+  >
+    <div>
+      <p>Category Budget Alert</p>
+
+      <strong>
+        {topCategoryBudgetAlert.category}
+      </strong>
+
+      <span>
+        {topCategoryBudgetAlert.type ===
+        'danger'
+          ? 'Category budget exceeded'
+          : 'Approaching category limit'}
+      </span>
+    </div>
+
+    <div className="category-budget-dashboard-values">
+      <strong>
+        {topCategoryBudgetAlert.percentage.toFixed(
+          1
+        )}
+        %
+      </strong>
+
+      <span>
+        ₹{formatCurrency(
+          topCategoryBudgetAlert.spent
+        )}
+        {' / '}
+        ₹{formatCurrency(
+          topCategoryBudgetAlert.budget
+        )}
+      </span>
+    </div>
+  </div>
+)}
 
       {/* =========================
           SPENDING PACE

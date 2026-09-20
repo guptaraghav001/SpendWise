@@ -1,6 +1,6 @@
 function InsightsSection({
   financialOverview,
-  spendingPace,
+  spendingPace,topCategoryBudgetAlert,
   biggestCategoryChange,
   savingsInsight,
   upcomingPaymentAlert,
@@ -67,6 +67,30 @@ function InsightsSection({
             </span>
           </div>
         )}
+
+
+{topCategoryBudgetAlert && (
+  <div
+    className={`insight-item insight-item-${topCategoryBudgetAlert.type}`}
+  >
+    <p>Category Budget</p>
+
+    <strong>
+      {topCategoryBudgetAlert.category}
+    </strong>
+
+    <span>
+      {topCategoryBudgetAlert.type ===
+      'danger'
+        ? `${topCategoryBudgetAlert.percentage.toFixed(
+            1
+          )}% used — category budget exceeded.`
+        : `${topCategoryBudgetAlert.percentage.toFixed(
+            1
+          )}% used — approaching category limit.`}
+    </span>
+  </div>
+)}
 
 
         {biggestCategoryChange && (

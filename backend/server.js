@@ -819,6 +819,184 @@ app.put(
   }
 )
 
+
+// ======================================================
+// CATEGORY BUDGETS
+// ======================================================
+
+// GET CATEGORY BUDGETS
+app.get(
+  '/api/category-budgets',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
+      const result = await pool.query(
+        `SELECT
+           id,
+           category,
+           amount,
+           month,
+           year,
+           created_at,
+           updated_at
+
+         FROM category_budgets
+
+         WHERE user_id = $1
+         AND month = $2
+         AND year = $3
+
+         ORDER BY category ASC`,
+        [
+          req.user.userId,
+          month,
+          year
+        ]
+      )
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error(
+        'Error fetching category budgets:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// CREATE OR UPDATE CATEGORY BUDGET
+app.put(
+  '/api/category-budgets',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        category,
+        amount,
+        month,
+        year
+      } = req.body
+
+      const numericAmount = Number(amount)
+      const numericMonth = Number(month)
+      const numericYear = Number(year)
+
+      if (
+        !allowedCategories.includes(category)
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid category'
+        })
+      }
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Category budget must be greater than 0'
+        })
+      }
+
+      if (
+        !Number.isInteger(numericMonth) ||
+        numericMonth < 1 ||
+        numericMonth > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(numericYear) ||
+        numericYear < 2000 ||
+        numericYear > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
+      const result = await pool.query(
+        `INSERT INTO category_budgets
+           (
+             user_id,
+             category,
+             amount,
+             month,
+             year
+           )
+
+         VALUES ($1, $2, $3, $4, $5)
+
+         ON CONFLICT (
+           user_id,
+           category,
+           month,
+           year
+         )
+
+         DO UPDATE SET
+           amount = EXCLUDED.amount,
+           updated_at = CURRENT_TIMESTAMP
+
+         RETURNING *`,
+        [
+          req.user.userId,
+          category,
+          numericAmount,
+          numericMonth,
+          numericYear
+        ]
+      )
+
+      res.json(result.rows[0])
+
+    } catch (error) {
+      console.error(
+        'Error saving category budget:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
 // ======================================================
 // ANALYTICS
 // ======================================================

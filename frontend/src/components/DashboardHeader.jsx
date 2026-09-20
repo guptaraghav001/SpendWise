@@ -35,6 +35,11 @@ function DashboardHeader({
     subtitle: 'Manage expenses that repeat automatically'
   },
 
+  'category-budgets': {
+    title: 'Category Budgets',
+    subtitle: 'Set and manage budgets for different expense categories'
+  },
+
   insights: {
     title: 'Insights',
     subtitle: 'Get actionable insights about your finances'

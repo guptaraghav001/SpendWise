@@ -78,6 +78,24 @@ function Sidebar({
           Recurring
         </button>
 
+
+<button
+  className={
+    activeSection ===
+    'category-budgets'
+      ? 'active'
+      : ''
+  }
+  onClick={() =>
+    onSectionChange(
+      'category-budgets'
+    )
+  }
+>
+  Category Budgets
+</button>
+
+
 <button
   className={
     activeSection === 'insights'

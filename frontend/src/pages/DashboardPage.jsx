@@ -6,6 +6,10 @@ import DashboardHeader from '../components/DashboardHeader.jsx'
 import { apiRequest }
   from '../utils/apiRequest.js'
 
+  import CategoryBudgets
+  from '../components/CategoryBudgets.jsx'
+
+
 import {
   getBudgetStatus,
   getSpendingPace,
@@ -89,7 +93,10 @@ const [recurringSummary, setRecurringSummary] = useState({
   nextExpense: null
 })
 
-
+const [
+  categoryBudgets,
+  setCategoryBudgets
+] = useState([])
 
 
 const processRecurringExpenses =
@@ -185,7 +192,7 @@ useEffect(() => {
 }, [
   selectedMonth,
   selectedYear,
-  
+  categoryBudgets
 ])
 
 
@@ -327,6 +334,28 @@ useEffect(() => {
 
 
 
+useEffect(() => {
+  apiRequest(
+    `/api/category-budgets?month=${selectedMonth}&year=${selectedYear}`
+  )
+    .then((data) => {
+      setCategoryBudgets(data)
+    })
+    .catch((error) => {
+      console.error(
+        'Category budgets error:',
+        error
+      )
+
+      setCategoryBudgets([])
+    })
+
+}, [
+  selectedMonth,
+  selectedYear
+])
+
+
       const spent = expenses.reduce(
   (total, expense) => total + Number(expense.amount),
   0
@@ -374,6 +403,56 @@ const categoryTotals = expenses.reduce(
   },
   {}
 )
+
+const categoryBudgetAlerts =
+  categoryBudgets
+    .map((item) => {
+      const budgetAmount =
+        Number(item.amount)
+
+      const categorySpent =
+        Number(
+          categoryTotals[item.category]
+        ) || 0
+
+      const percentage =
+        budgetAmount > 0
+          ? (
+              categorySpent /
+              budgetAmount
+            ) * 100
+          : 0
+
+      let type = 'normal'
+
+      if (percentage >= 100) {
+        type = 'danger'
+      } else if (percentage >= 80) {
+        type = 'warning'
+      }
+
+      return {
+        category: item.category,
+        budget: budgetAmount,
+        spent: categorySpent,
+        percentage,
+        type
+      }
+    })
+    .filter(
+      (item) =>
+        item.type === 'warning' ||
+        item.type === 'danger'
+    )
+    .sort(
+      (a, b) =>
+        b.percentage -
+        a.percentage
+    )
+
+const topCategoryBudgetAlert =
+  categoryBudgetAlerts[0] || null
+
 
 const chartData = Object.entries(categoryTotals).map(
   ([category, amount]) => ({
@@ -946,8 +1025,8 @@ const importantInsightCount =
     financialOverview,
     spendingPace,
     upcomingPaymentAlert
-  )
-
+  ) +
+  categoryBudgetAlerts.length
 
 
   return (
@@ -979,6 +1058,7 @@ onSectionChange={handleSectionChange}
 
 
 {activeSection === 'dashboard' && (
+  
   <DashboardOverview
     budget={budget}
     spent={spent}
@@ -1026,6 +1106,10 @@ onSectionChange={handleSectionChange}
     savingsProgress={
       savingsProgress
     }
+
+    topCategoryBudgetAlert={
+  topCategoryBudgetAlert
+}
 
     savingsRemaining={
       savingsRemaining
@@ -1128,13 +1212,56 @@ onSectionChange={handleSectionChange}
 {activeSection === 'savings' && (
   <SavingsGoals />
 )}
+
+
+
 {activeSection === 'recurring' && (
   <RecurringExpenses />
 )} 
 
+{activeSection ===
+  'category-budgets' && (
+ 
+   <CategoryBudgets
+  selectedMonth={selectedMonth}
+  selectedYear={selectedYear}
+  expenses={expenses}
+
+  onBudgetSaved={(
+    savedBudget
+  ) => {
+    setCategoryBudgets(
+      (current) => {
+        const exists =
+          current.some(
+            (item) =>
+              item.category ===
+              savedBudget.category
+          )
+
+        if (exists) {
+          return current.map(
+            (item) =>
+              item.category ===
+              savedBudget.category
+                ? savedBudget
+                : item
+          )
+        }
+
+        return [
+          ...current,
+          savedBudget
+        ]
+      }
+    )
+  }}
+/>
+)}
 
 {activeSection === 'insights' && (
   <InsightsSection
+  
     financialOverview={
       financialOverview
     }
@@ -1142,6 +1269,9 @@ onSectionChange={handleSectionChange}
     spendingPace={
       spendingPace
     }
+    topCategoryBudgetAlert={
+  topCategoryBudgetAlert
+}
 
     biggestCategoryChange={
       biggestCategoryChange
