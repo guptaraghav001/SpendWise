@@ -209,22 +209,7 @@ const authenticateToken = (req, res, next) => {
     }
   )
 }
-// TEMPORARY PROXY DIAGNOSTIC
-if (process.env.NODE_ENV === 'production') {
-  app.get('/api/debug/proxy', (req, res) => {
-    const forwardedFor =
-      req.headers['x-forwarded-for']
 
-    res.json({
-      trustProxy: req.app.get('trust proxy'),
-      clientIp: req.ip,
-      forwardedHopCount:
-        typeof forwardedFor === 'string'
-          ? forwardedFor.split(',').length
-          : 0
-    })
-  })
-}
 
 // ======================================================
 // HEALTH ROUTE
