@@ -39,6 +39,20 @@ function Sidebar({
           Transactions
         </button>
 
+<button
+  className={
+    activeSection === 'income'
+      ? 'active'
+      : ''
+  }
+  onClick={() =>
+    onSectionChange('income')
+  }
+>
+  Income
+</button>
+
+
         <button
           className={
             activeSection === 'analytics'

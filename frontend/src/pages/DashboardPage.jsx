@@ -16,7 +16,7 @@ import {
   getSavingsInsight,
   getUpcomingPaymentAlert,
   getFinancialOverview,
-  getImportantInsightCount
+  getImportantInsightCount,getCashFlowInsight
 } from '../utils/financialInsights.js'
 
 import SavingsGoals from '../components/SavingsGoals.jsx'
@@ -26,6 +26,8 @@ import AnalyticsSection from '../components/AnalyticsSection.jsx'
 import TransactionsSection from '../components/TransactionsSection.jsx'
 import DashboardOverview from '../components/DashboardOverview.jsx'
 import InsightsSection from '../components/InsightsSection.jsx'
+import IncomeSection
+  from '../components/IncomeSection.jsx'
 
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
@@ -53,12 +55,18 @@ const [selectedYear, setSelectedYear] = useState(
 const [editingId, setEditingId] = useState(null)
 
   const [expenses, setExpenses] = useState([])
+const [incomes, setIncomes] = useState([])
 
   const [searchTerm, setSearchTerm] = useState('')
 const [filterCategory, setFilterCategory] = useState('All')
 const [sortOption, setSortOption] = useState('newest')
 
 const [trendData, setTrendData] = useState([])
+const [
+  cashFlowTrend,
+  setCashFlowTrend
+] = useState([])
+
 const [trendRefresh, setTrendRefresh] = useState(0)
 const [expenseRefresh, setExpenseRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -173,6 +181,28 @@ useEffect(() => {
 
 useEffect(() => {
   apiRequest(
+    `/api/incomes?month=${selectedMonth}&year=${selectedYear}`
+  )
+    .then((data) => {
+      setIncomes(data)
+    })
+    .catch((error) => {
+      console.error(
+        'Error fetching income:',
+        error
+      )
+
+      setIncomes([])
+    })
+
+}, [
+  selectedMonth,
+  selectedYear
+])
+
+
+useEffect(() => {
+  apiRequest(
     `/api/budget?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
@@ -236,6 +266,29 @@ useEffect(() => {
   trendRefresh,
   selectedMonth,
   selectedYear
+])
+
+
+useEffect(() => {
+  apiRequest(
+    `/api/analytics/cash-flow-trend?month=${selectedMonth}&year=${selectedYear}`
+  )
+    .then((data) => {
+      setCashFlowTrend(data)
+    })
+    .catch((error) => {
+      console.error(
+        'Cash flow trend error:',
+        error
+      )
+
+      setCashFlowTrend([])
+    })
+
+}, [
+  selectedMonth,
+  selectedYear,
+  trendRefresh
 ])
 
 
@@ -361,6 +414,26 @@ useEffect(() => {
   0
 
 )
+
+const totalIncome = incomes.reduce(
+  (total, income) =>
+    total + Number(income.amount),
+  0
+)
+const netCashFlow =
+  totalIncome - spent
+
+  const cashFlowInsight =
+  getCashFlowInsight(
+    totalIncome,
+    spent
+  )
+
+  
+  const savingsRate =
+  totalIncome > 0
+    ? (netCashFlow / totalIncome) * 100
+    : null
 
   const remaining = budget - spent
 
@@ -798,6 +871,23 @@ const formattedTrendData = trendData.map((item) => ({
   amount: Number(item.total)
 }))
 
+const formattedCashFlowTrend =
+  cashFlowTrend.map((item) => ({
+    month:
+      monthNames[
+        Number(item.month) - 1
+      ].slice(0, 3),
+
+    income:
+      Number(item.income),
+
+    expenses:
+      Number(item.expenses),
+
+    net:
+      Number(item.net)
+  }))
+
 const currentTrendItem = trendData.find(
   (item) =>
     Number(item.month) === selectedMonth &&
@@ -1024,10 +1114,10 @@ const importantInsightCount =
   getImportantInsightCount(
     financialOverview,
     spendingPace,
-    upcomingPaymentAlert
+    upcomingPaymentAlert,
+    cashFlowInsight
   ) +
   categoryBudgetAlerts.length
-
 
   return (
     
@@ -1098,6 +1188,18 @@ onSectionChange={handleSectionChange}
     biggestCategoryChange={
       biggestCategoryChange
     }
+
+    totalIncome={
+  totalIncome
+}
+
+netCashFlow={
+  netCashFlow
+}
+
+savingsRate={
+  savingsRate
+}
 
     savingsInsight={
       savingsInsight
@@ -1170,6 +1272,27 @@ onSectionChange={handleSectionChange}
 )}
 
 
+{activeSection === 'income' && (
+<IncomeSection
+  selectedMonth={selectedMonth}
+  selectedYear={selectedYear}
+
+  onIncomeChanged={() => {
+    apiRequest(
+      `/api/incomes?month=${selectedMonth}&year=${selectedYear}`
+    )
+      .then((data) => {
+        setIncomes(data)
+      })
+      .catch((error) => {
+        console.error(
+          'Income refresh error:',
+          error
+        )
+      })
+  }}
+/>
+)}
 
 {activeSection === 'analytics' && (
   <AnalyticsSection
@@ -1199,6 +1322,10 @@ onSectionChange={handleSectionChange}
       categoryTotals
     }
 
+    formattedCashFlowTrend={
+  formattedCashFlowTrend
+}
+
     spent={spent}
 
     formatCurrency={
@@ -1226,6 +1353,7 @@ onSectionChange={handleSectionChange}
   selectedMonth={selectedMonth}
   selectedYear={selectedYear}
   expenses={expenses}
+
 
   onBudgetSaved={(
     savedBudget
@@ -1262,6 +1390,11 @@ onSectionChange={handleSectionChange}
 {activeSection === 'insights' && (
   <InsightsSection
   
+  cashFlowInsight={
+  cashFlowInsight
+}
+
+
     financialOverview={
       financialOverview
     }

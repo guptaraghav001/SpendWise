@@ -7,8 +7,10 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  
   ResponsiveContainer
 } from 'recharts'
+
 
 function AnalyticsSection({
   topCategory,
@@ -18,6 +20,7 @@ function AnalyticsSection({
 
   chartData,
   formattedTrendData,
+  formattedCashFlowTrend,
 
   currentMonthSpent,
   previousMonthSpent,
@@ -210,6 +213,65 @@ function AnalyticsSection({
         )}
 
       </div>
+
+
+<div className="trend-analytics">
+
+  <h2>
+    6-Month Income vs Expenses
+  </h2>
+
+  {formattedCashFlowTrend.length ===
+  0 ? (
+    <p>
+      No cash flow history available.
+    </p>
+  ) : (
+    <div className="trend-chart">
+
+      <ResponsiveContainer
+        width="100%"
+        height={300}
+      >
+        <LineChart
+          data={
+            formattedCashFlowTrend
+          }
+        >
+
+          <CartesianGrid
+            strokeDasharray="3 3"
+          />
+
+          <XAxis dataKey="month" />
+
+          <YAxis />
+
+          <Tooltip />
+
+          <Line
+            type="monotone"
+            dataKey="income"
+            stroke="#4caf50"
+            strokeWidth={3}
+            name="Income"
+          />
+
+          <Line
+            type="monotone"
+            dataKey="expenses"
+            stroke="#f44336"
+            strokeWidth={3}
+            name="Expenses"
+          />
+
+        </LineChart>
+      </ResponsiveContainer>
+
+    </div>
+  )}
+
+</div>
 
 
       <div className="category-breakdown">

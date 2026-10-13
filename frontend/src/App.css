@@ -1203,7 +1203,9 @@ button:disabled {
   border-left: 4px solid #646cff;
 }
 
-
+.insight-item-positive {
+  border-left: 4px solid #4caf50;
+}
 
 .insights-header h2 {
   margin: 0 0 6px;
@@ -1473,6 +1475,157 @@ button:disabled {
   font-size: 20px;
 }
 
+
+/* =====================================================
+   INCOME
+   ===================================================== */
+
+.income-section {
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 24px;
+  margin-bottom: 40px;
+
+  border-radius: 16px;
+  background: #1f1f1f;
+}
+
+.income-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+
+  margin-bottom: 24px;
+}
+
+.income-header h2 {
+  margin: 0 0 6px;
+}
+
+.income-header p {
+  margin: 0;
+  opacity: 0.7;
+}
+
+.income-summary {
+  padding: 20px;
+  margin-bottom: 20px;
+
+  border-radius: 14px;
+  background: #292929;
+}
+
+.income-summary p {
+  margin: 0 0 6px;
+  opacity: 0.7;
+}
+
+.income-summary h2 {
+  margin: 0 0 5px;
+}
+
+.income-summary span {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.income-form {
+  display: grid;
+
+  grid-template-columns:
+    2fr 1fr 1fr 1fr auto;
+
+  gap: 10px;
+
+  margin-bottom: 24px;
+}
+
+.income-form input,
+.income-form select,
+.income-form button {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.income-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.income-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+
+  padding: 18px 0;
+
+  border-bottom:
+    1px solid #3a3a3a;
+}
+
+.income-card p {
+  margin: 5px 0;
+  opacity: 0.7;
+}
+
+.income-card small {
+  opacity: 0.6;
+}
+
+.income-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.income-card-actions > strong {
+  margin-right: 10px;
+}
+
+
+/* =====================================================
+   CASH FLOW SUMMARY
+   ===================================================== */
+
+.cash-flow-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 20px;
+
+  margin-bottom: 30px;
+}
+
+.cash-flow-card {
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 20px;
+
+  border-radius: 14px;
+  background: #1f1f1f;
+}
+
+.cash-flow-card p {
+  margin: 0 0 8px;
+  opacity: 0.7;
+}
+
+.cash-flow-card h2 {
+  margin: 0 0 6px;
+}
+
+.cash-flow-card span {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+
+
 /* =====================================================
    RESPONSIVE DESIGN
    ===================================================== */
@@ -1637,6 +1790,15 @@ button:disabled {
   box-sizing: border-box;
   overflow: hidden;
 }
+
+.cash-flow-summary {
+  grid-template-columns: 1fr;
+}
+
+.cash-flow-card {
+  width: 100%;
+}
+
   /* ANALYTICS */
 
   .analytics-summary {
@@ -1846,7 +2008,60 @@ button:disabled {
   box-sizing: border-box;
 }
 
+.income-section {
+  padding: 18px;
 }
+
+.income-header {
+  flex-direction: column;
+}
+
+.income-header button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.income-form {
+  grid-template-columns: 1fr;
+}
+
+.income-form input,
+.income-form select,
+.income-form button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.income-card {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.income-card-actions {
+  width: 100%;
+  display: grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  gap: 8px;
+}
+
+.income-card-actions > strong {
+  grid-column: 1 / -1;
+  margin-right: 0;
+}
+
+.income-card-actions button {
+  width: 100%;
+  min-height: 40px;
+}
+
+}
+
+
+
+
 
 @media (max-width: 900px) {
   body {

@@ -20,6 +20,11 @@ function DashboardHeader({
     subtitle: 'Manage and review your monthly expenses'
   },
 
+  income: {
+    title: 'Income',
+    subtitle: 'Manage and review your monthly income'
+  },
+
   analytics: {
     title: 'Analytics',
     subtitle: 'Understand your spending patterns'

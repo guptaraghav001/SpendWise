@@ -81,6 +81,14 @@ const allowedCategories = [
   'Other'
 ]
 
+const allowedIncomeSources = [
+  'Salary',
+  'Freelance',
+  'Business',
+  'Investment',
+  'Other'
+]
+
 const allowedFrequencies = [
   'monthly',
   'yearly'
@@ -1115,6 +1123,161 @@ app.get(
   }
 )
 
+// ======================================================
+// 6-MONTH CASH FLOW TREND
+// ======================================================
+
+app.get(
+  '/api/analytics/cash-flow-trend',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
+      const selectedDate =
+        new Date(
+          Date.UTC(
+            year,
+            month - 1,
+            1
+          )
+        )
+
+      const months = []
+
+      for (let index = 5; index >= 0; index--) {
+        const date =
+          new Date(selectedDate)
+
+        date.setUTCMonth(
+          selectedDate.getUTCMonth() -
+            index
+        )
+
+        months.push({
+          month:
+            date.getUTCMonth() + 1,
+
+          year:
+            date.getUTCFullYear()
+        })
+      }
+
+
+      const result = []
+
+      for (const period of months) {
+        const expenseResult =
+          await pool.query(
+            `SELECT
+               COALESCE(
+                 SUM(amount),
+                 0
+               ) AS total
+
+             FROM expenses
+
+             WHERE user_id = $1
+
+             AND EXTRACT(
+               MONTH FROM expense_date
+             ) = $2
+
+             AND EXTRACT(
+               YEAR FROM expense_date
+             ) = $3`,
+            [
+              req.user.userId,
+              period.month,
+              period.year
+            ]
+          )
+
+
+        const incomeResult =
+          await pool.query(
+            `SELECT
+               COALESCE(
+                 SUM(amount),
+                 0
+               ) AS total
+
+             FROM incomes
+
+             WHERE user_id = $1
+
+             AND EXTRACT(
+               MONTH FROM income_date
+             ) = $2
+
+             AND EXTRACT(
+               YEAR FROM income_date
+             ) = $3`,
+            [
+              req.user.userId,
+              period.month,
+              period.year
+            ]
+          )
+
+
+        const expenses =
+          Number(
+            expenseResult.rows[0].total
+          )
+
+        const income =
+          Number(
+            incomeResult.rows[0].total
+          )
+
+        result.push({
+          month: period.month,
+          year: period.year,
+          income,
+          expenses,
+          net: income - expenses
+        })
+      }
+
+
+      res.json(result)
+
+    } catch (error) {
+      console.error(
+        'Cash flow trend error:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+
 // GET CATEGORY SPENDING COMPARISON
 app.get(
   '/api/analytics/category-comparison',
@@ -2143,6 +2306,380 @@ app.post(
     }
   }
 )
+
+// ======================================================
+// INCOME
+// ======================================================
+
+// GET MONTHLY INCOME
+app.get(
+  '/api/incomes',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month'
+        })
+      }
+
+      if (
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid year'
+        })
+      }
+
+      const result = await pool.query(
+        `SELECT
+           id,
+           title,
+           source,
+           amount,
+           income_date,
+           created_at,
+           updated_at
+
+         FROM incomes
+
+         WHERE user_id = $1
+
+         AND EXTRACT(
+           MONTH FROM income_date
+         ) = $2
+
+         AND EXTRACT(
+           YEAR FROM income_date
+         ) = $3
+
+         ORDER BY income_date DESC,
+                  id DESC`,
+        [
+          req.user.userId,
+          month,
+          year
+        ]
+      )
+
+      res.json(result.rows)
+
+    } catch (error) {
+      console.error(
+        'Error fetching incomes:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// CREATE INCOME
+app.post(
+  '/api/incomes',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        title,
+        source,
+        amount,
+        incomeDate
+      } = req.body
+
+      const cleanTitle =
+        typeof title === 'string'
+          ? title.trim()
+          : ''
+
+      const numericAmount =
+        Number(amount)
+
+      if (!cleanTitle) {
+        return res.status(400).json({
+          message:
+            'Income title is required'
+        })
+      }
+
+      if (cleanTitle.length > 100) {
+        return res.status(400).json({
+          message:
+            'Income title is too long'
+        })
+      }
+
+      if (
+        !allowedIncomeSources.includes(
+          source
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid income source'
+        })
+      }
+
+      if (
+        !Number.isFinite(
+          numericAmount
+        ) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Income amount must be greater than 0'
+        })
+      }
+
+      if (
+        !incomeDate ||
+        Number.isNaN(
+          Date.parse(incomeDate)
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Valid income date is required'
+        })
+      }
+
+      const result = await pool.query(
+        `INSERT INTO incomes
+           (
+             user_id,
+             title,
+             source,
+             amount,
+             income_date
+           )
+
+         VALUES ($1, $2, $3, $4, $5)
+
+         RETURNING *`,
+        [
+          req.user.userId,
+          cleanTitle,
+          source,
+          numericAmount,
+          incomeDate
+        ]
+      )
+
+      res.status(201).json(
+        result.rows[0]
+      )
+
+    } catch (error) {
+      console.error(
+        'Error creating income:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+// UPDATE INCOME
+app.put(
+  '/api/incomes/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const incomeId =
+        Number(req.params.id)
+
+      const {
+        title,
+        source,
+        amount,
+        incomeDate
+      } = req.body
+
+      const cleanTitle =
+        typeof title === 'string'
+          ? title.trim()
+          : ''
+
+      const numericAmount =
+        Number(amount)
+
+      if (
+        !Number.isInteger(incomeId) ||
+        incomeId <= 0
+      ) {
+        return res.status(400).json({
+          message: 'Invalid income ID'
+        })
+      }
+
+      if (!cleanTitle) {
+        return res.status(400).json({
+          message:
+            'Income title is required'
+        })
+      }
+
+      if (cleanTitle.length > 100) {
+        return res.status(400).json({
+          message:
+            'Income title is too long'
+        })
+      }
+
+      if (
+        !allowedIncomeSources.includes(
+          source
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid income source'
+        })
+      }
+
+      if (
+        !Number.isFinite(
+          numericAmount
+        ) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Income amount must be greater than 0'
+        })
+      }
+
+      if (
+        !incomeDate ||
+        Number.isNaN(
+          Date.parse(incomeDate)
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Valid income date is required'
+        })
+      }
+
+      const result = await pool.query(
+        `UPDATE incomes
+
+         SET
+           title = $1,
+           source = $2,
+           amount = $3,
+           income_date = $4,
+           updated_at =
+             CURRENT_TIMESTAMP
+
+         WHERE id = $5
+         AND user_id = $6
+
+         RETURNING *`,
+        [
+          cleanTitle,
+          source,
+          numericAmount,
+          incomeDate,
+          incomeId,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message:
+            'Income not found'
+        })
+      }
+
+      res.json(result.rows[0])
+
+    } catch (error) {
+      console.error(
+        'Error updating income:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
+// DELETE INCOME
+app.delete(
+  '/api/incomes/:id',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const incomeId =
+        Number(req.params.id)
+
+      if (
+        !Number.isInteger(incomeId) ||
+        incomeId <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Invalid income ID'
+        })
+      }
+
+      const result = await pool.query(
+        `DELETE FROM incomes
+
+         WHERE id = $1
+         AND user_id = $2
+
+         RETURNING id`,
+        [
+          incomeId,
+          req.user.userId
+        ]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message:
+            'Income not found'
+        })
+      }
+
+      res.json({
+        message:
+          'Income deleted successfully'
+      })
+
+    } catch (error) {
+      console.error(
+        'Error deleting income:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Server error'
+      })
+    }
+  }
+)
+
 
 // ======================================================
 // START SERVER

@@ -2,6 +2,9 @@ function DashboardOverview({
   budget,
   spent,
   remaining,
+  totalIncome,
+netCashFlow,
+savingsRate,
   topCategoryBudgetAlert,
   budgetInput,
   setBudgetInput,
@@ -114,6 +117,54 @@ function DashboardOverview({
         </div>
 
       </div>
+
+
+<div className="cash-flow-summary">
+
+  <div className="cash-flow-card">
+    <p>Monthly Income</p>
+
+    <h2>
+      ₹{formatCurrency(totalIncome)}
+    </h2>
+  </div>
+
+
+  <div className="cash-flow-card">
+    <p>Net Cash Flow</p>
+
+    <h2>
+      {netCashFlow >= 0 ? '+' : '-'}
+      ₹{formatCurrency(
+        Math.abs(netCashFlow)
+      )}
+    </h2>
+
+    <span>
+      {netCashFlow >= 0
+        ? 'Income exceeds tracked expenses'
+        : 'Tracked expenses exceed income'}
+    </span>
+  </div>
+
+
+  <div className="cash-flow-card">
+    <p>Cash Flow Rate</p>
+
+    <h2>
+      {savingsRate !== null
+        ? `${savingsRate.toFixed(1)}%`
+        : '—'}
+    </h2>
+
+    <span>
+      {totalIncome > 0
+        ? 'Income remaining after tracked expenses'
+        : 'Add income to calculate'}
+    </span>
+  </div>
+
+</div>
 
 
       {/* =========================

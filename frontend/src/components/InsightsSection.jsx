@@ -1,6 +1,9 @@
 function InsightsSection({
   financialOverview,
-  spendingPace,topCategoryBudgetAlert,
+  spendingPace,  cashFlowInsight,
+topCategoryBudgetAlert,
+
+  
   biggestCategoryChange,
   savingsInsight,
   upcomingPaymentAlert,
@@ -51,6 +54,22 @@ function InsightsSection({
           </span>
         </div>
 
+
+{cashFlowInsight && (
+  <div
+    className={`insight-item insight-item-${cashFlowInsight.type}`}
+  >
+    <p>Cash Flow</p>
+
+    <strong>
+      {cashFlowInsight.title}
+    </strong>
+
+    <span>
+      {cashFlowInsight.message}
+    </span>
+  </div>
+)}
 
         {spendingPace && (
           <div

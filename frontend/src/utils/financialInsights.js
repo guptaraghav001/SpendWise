@@ -379,7 +379,8 @@ export const getFinancialOverview = (
 export const getImportantInsightCount = (
   financialOverview,
   spendingPace,
-  upcomingPaymentAlert
+  upcomingPaymentAlert,
+  cashFlowInsight
 ) => {
   const alerts = [
     financialOverview?.type === 'danger' ||
@@ -392,8 +393,78 @@ export const getImportantInsightCount = (
     upcomingPaymentAlert?.type ===
       'danger' ||
       upcomingPaymentAlert?.type ===
-        'warning'
+        'warning',
+
+    cashFlowInsight?.type === 'danger' ||
+      cashFlowInsight?.type === 'warning'
   ]
 
   return alerts.filter(Boolean).length
+}
+
+// ======================================================
+// CASH FLOW INSIGHT
+// ======================================================
+
+export const getCashFlowInsight = (
+  totalIncome,
+  spent
+) => {
+  const income =
+    Number(totalIncome) || 0
+
+  const expenses =
+    Number(spent) || 0
+
+  if (income <= 0) {
+    return {
+      type: 'neutral',
+      title: 'No income recorded',
+      message:
+        'Add income for this month to calculate your cash flow.'
+    }
+  }
+
+  const net =
+    income - expenses
+
+  const remainingRate =
+    (net / income) * 100
+
+  if (net < 0) {
+    return {
+      type: 'danger',
+      title:
+        'Expenses exceed recorded income',
+      message:
+        `Tracked expenses exceed recorded income by ₹${Math.abs(
+          net
+        ).toLocaleString('en-IN')}.`,
+      net,
+      remainingRate
+    }
+  }
+
+  if (net === 0) {
+    return {
+      type: 'warning',
+      title:
+        'Income and expenses are equal',
+      message:
+        'All recorded income has been matched by tracked expenses.',
+      net,
+      remainingRate: 0
+    }
+  }
+
+  return {
+    type: 'positive',
+    title: 'Positive cash flow',
+    message:
+      `Recorded income exceeds tracked expenses by ₹${net.toLocaleString(
+        'en-IN'
+      )}.`,
+    net,
+    remainingRate
+  }
 }
