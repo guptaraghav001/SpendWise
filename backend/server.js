@@ -1,16 +1,58 @@
-require('dotenv').config()
-
+if (process.env.NODE_ENV !== 'test') {
+  require('dotenv').config()
+}
 const express = require('express')
+
+
 const cors = require('cors')
 const rateLimit = require('express-rate-limit')
-const { Pool } = require('pg')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const helmet = require('helmet')
 
 const app = express()
-
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
 const PORT = process.env.PORT || 5001
+
+
+// ======================================================
+// ENVIRONMENT VALIDATION
+// ======================================================
+
+const requiredEnvVariables = [
+  'DATABASE_URL',
+  'JWT_SECRET'
+]
+
+if (process.env.NODE_ENV !== 'test') {
+
+  const missingEnvVariables =
+    requiredEnvVariables.filter(
+      (variable) =>
+        !process.env[variable] ||
+        !process.env[variable].trim()
+    )
+
+  if (missingEnvVariables.length > 0) {
+    console.error(
+      'Missing required environment variables:',
+      missingEnvVariables.join(', ')
+    )
+
+    process.exit(1)
+  }
+
+  if (process.env.JWT_SECRET.length < 32) {
+    console.error(
+      'JWT_SECRET must contain at least 32 characters'
+    )
+
+    process.exit(1)
+  }
+
+}
 
 // ======================================================
 // SECURITY / MIDDLEWARE
@@ -26,6 +68,26 @@ const authLimiter = rateLimit({
       'Too many authentication attempts. Please try again later.'
   }
 })
+
+// ======================================================
+// GENERAL API RATE LIMITER
+// ======================================================
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+
+  limit: 300,
+
+  standardHeaders: 'draft-7',
+
+  legacyHeaders: false,
+
+  message: {
+    message:
+      'Too many requests. Please try again later.'
+  }
+})
+
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -47,28 +109,23 @@ app.use(
 )
 
 app.use(express.json({ limit: '100kb' }))
-
+app.use('/api', apiLimiter)
 // ======================================================
 // DATABASE
 // ======================================================
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+const pool = require('./db')
 
-  ssl:
-    process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: false }
-      : false
-})
 
-pool.query('SELECT NOW()', (error) => {
-  if (error) {
-    console.error('Database connection error:', error)
-  } else {
-    console.log('Database connected successfully')
-  }
-})
-
+if (process.env.NODE_ENV !== 'test') {
+  pool.query('SELECT NOW()', (error) => {
+    if (error) {
+      console.error('Database connection error:', error)
+    } else {
+      console.log('Database connected successfully')
+    }
+  })
+}
 // ======================================================
 // COMMON VALIDATION
 // ======================================================
@@ -135,9 +192,12 @@ const authenticateToken = (req, res, next) => {
   }
 
   jwt.verify(
-    token,
-    process.env.JWT_SECRET,
-    (error, decoded) => {
+  token,
+  process.env.JWT_SECRET,
+  {
+    algorithms: ['HS256']
+  },
+  (error, decoded) => {
       if (error) {
         return res.status(403).json({
           message: 'Invalid or expired token'
@@ -170,12 +230,24 @@ app.post(
     try {
       const { name, email, password } = req.body
 
-      const cleanName = name?.trim()
-      const cleanEmail =
-        email?.trim().toLowerCase()
+     const cleanName =
+  typeof name === 'string'
+    ? name.trim()
+    : ''
 
-      if (!cleanName || !cleanEmail || !password) {
-        return res.status(400).json({
+const cleanEmail =
+  typeof email === 'string'
+    ? email.trim().toLowerCase()
+    : ''
+
+
+if (
+  !cleanName ||
+  !cleanEmail ||
+  typeof password !== 'string' ||
+  !password
+) {
+          return res.status(400).json({
           message:
             'Name, email and password are required'
         })
@@ -272,11 +344,16 @@ app.post(
     try {
       const { email, password } = req.body
 
-      const cleanEmail =
-        email?.trim().toLowerCase()
+  const cleanEmail =
+  typeof email === 'string'
+    ? email.trim().toLowerCase()
+    : ''
 
-      if (!cleanEmail || !password) {
-        return res.status(400).json({
+if (
+  !cleanEmail ||
+  typeof password !== 'string' ||
+  !password
+) {        return res.status(400).json({
           message:
             'Email and password are required'
         })
@@ -318,8 +395,9 @@ app.post(
         },
         process.env.JWT_SECRET,
         {
-          expiresIn: '1h'
-        }
+  algorithm: 'HS256',
+  expiresIn: '1h'
+}
       )
 
       res.json({
@@ -430,7 +508,11 @@ app.post(
         expenseDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+    const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
       const numericAmount = Number(amount)
 
       if (
@@ -532,7 +614,11 @@ app.put(
         expenseDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+      const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
       const numericAmount = Number(amount)
 
       if (
@@ -1454,7 +1540,11 @@ app.post(
         targetDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+    const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
       const numericTarget =
         Number(targetAmount)
 
@@ -1548,7 +1638,11 @@ app.put(
         targetDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+  const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
       const numericTarget =
         Number(targetAmount)
 
@@ -1798,7 +1892,12 @@ app.post(
         startDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+    const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
+
       const numericAmount = Number(amount)
 
       if (
@@ -1928,7 +2027,11 @@ app.put(
         startDate
       } = req.body
 
-      const cleanTitle = title?.trim()
+     const cleanTitle =
+  typeof title === 'string'
+    ? title.trim()
+    : ''
+
       const numericAmount = Number(amount)
 
       if (
@@ -2817,13 +2920,62 @@ app.get(
   }
 )
 
+// ======================================================
+// UNKNOWN API ROUTES
+// ======================================================
+
+app.use('/api', (req, res) => {
+  return res.status(404).json({
+    message: 'API endpoint not found'
+  })
+})
+
+
+// ======================================================
+// CENTRALIZED ERROR HANDLER
+// ======================================================
+
+app.use((error, req, res, next) => {
+  console.error(
+    'Unhandled API error:',
+    error
+  )
+
+  if (res.headersSent) {
+    return next(error)
+  }
+
+  if (
+    error instanceof SyntaxError &&
+    error.status === 400 &&
+    'body' in error
+  ) {
+    return res.status(400).json({
+      message: 'Invalid JSON request body'
+    })
+  }
+
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({
+      message: 'Request body is too large'
+    })
+  }
+
+  return res.status(500).json({
+    message: 'Internal server error'
+  })
+})
+
 
 // ======================================================
 // START SERVER
 // ======================================================
 
-app.listen(PORT, () => {
-  console.log(
-    `Server running on port ${PORT}`
-  )
-})
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
+}
+
+// Export Express application for automated tests
+module.exports = app

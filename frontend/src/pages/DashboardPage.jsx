@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-
+import { useEffect, useRef, useState } from 'react'
 import DashboardHeader from '../components/DashboardHeader.jsx'
 
 
@@ -58,7 +57,7 @@ const [editingId, setEditingId] = useState(null)
 
   const [expenses, setExpenses] = useState([])
 const [incomes, setIncomes] = useState([])
-
+const incomeRequestVersion = useRef(0)
   const [searchTerm, setSearchTerm] = useState('')
 const [filterCategory, setFilterCategory] = useState('All')
 const [sortOption, setSortOption] = useState('newest')
@@ -154,16 +153,23 @@ const processRecurringExpenses =
 
 
 useEffect(() => {
+  let cancelled = false
+
   setLoading(true)
   setError('')
+  setExpenses([])
 
   apiRequest(
     `/api/expenses?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setExpenses(data)
+      if (!cancelled) {
+        setExpenses(data)
+      }
     })
     .catch((error) => {
+      if (cancelled) return
+
       if (
         error.message !==
         'Your session has expired. Please log in again.'
@@ -172,9 +178,14 @@ useEffect(() => {
       }
     })
     .finally(() => {
-      setLoading(false)
+      if (!cancelled) {
+        setLoading(false)
+      }
     })
 
+  return () => {
+    cancelled = true
+  }
 }, [
   selectedMonth,
   selectedYear,
@@ -182,116 +193,144 @@ useEffect(() => {
 ])
 
 useEffect(() => {
+  let cancelled = false
+
+  const requestVersion =
+    ++incomeRequestVersion.current
+
+  setIncomes([])
+
   apiRequest(
     `/api/incomes?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setIncomes(data)
+      if (
+        !cancelled &&
+        requestVersion === incomeRequestVersion.current
+      ) {
+        setIncomes(data)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Error fetching income:',
-        error
-      )
+      if (
+        cancelled ||
+        requestVersion !== incomeRequestVersion.current
+      ) {
+        return
+      }
 
+      console.error('Income fetch error:', error)
       setIncomes([])
     })
 
-}, [
-  selectedMonth,
-  selectedYear
-])
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear])
+
 
 
 useEffect(() => {
+  let cancelled = false
+
+  setBudget(0)
+
   apiRequest(
     `/api/budget?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setBudget(
-        Number(data.amount) || 0
-      )
+      if (!cancelled) {
+        setBudget(Number(data.amount) || 0)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Error fetching budget:',
-        error
-      )
+      if (cancelled) return
 
+      console.error('Error fetching budget:', error)
       setBudget(0)
     })
 
-}, [
-  selectedMonth,
-  selectedYear,
-  categoryBudgets
-])
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear])
 
 
 useEffect(() => {
+  let cancelled = false
+
+  setCategoryComparison([])
+
   apiRequest(
     `/api/analytics/category-comparison?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setCategoryComparison(data)
+      if (!cancelled) {
+        setCategoryComparison(data)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Category comparison error:',
-        error
-      )
+      if (cancelled) return
+
+      console.error('Category comparison error:', error)
+      setCategoryComparison([])
     })
 
-}, [
-  selectedMonth,
-  selectedYear,
-  trendRefresh
-])
-
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear, trendRefresh])
 
 
 useEffect(() => {
+  let cancelled = false
+
+  setTrendData([])
+
   apiRequest(
     `/api/analytics/trend?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setTrendData(data)
+      if (!cancelled) {
+        setTrendData(data)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Error fetching spending trend:',
-        error
-      )
+      if (cancelled) return
+
+      console.error('Spending trend error:', error)
+      setTrendData([])
     })
 
-}, [
-  trendRefresh,
-  selectedMonth,
-  selectedYear
-])
-
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear, trendRefresh])
 
 useEffect(() => {
+  let cancelled = false
+
+  setCashFlowTrend([])
+
   apiRequest(
     `/api/analytics/cash-flow-trend?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setCashFlowTrend(data)
+      if (!cancelled) {
+        setCashFlowTrend(data)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Cash flow trend error:',
-        error
-      )
+      if (cancelled) return
 
+      console.error('Cash flow trend error:', error)
       setCashFlowTrend([])
     })
 
-}, [
-  selectedMonth,
-  selectedYear,
-  trendRefresh
-])
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear, trendRefresh])
 
 
 useEffect(() => {
@@ -390,26 +429,29 @@ useEffect(() => {
 
 
 useEffect(() => {
+  let cancelled = false
+
+  setCategoryBudgets([])
+
   apiRequest(
     `/api/category-budgets?month=${selectedMonth}&year=${selectedYear}`
   )
     .then((data) => {
-      setCategoryBudgets(data)
+      if (!cancelled) {
+        setCategoryBudgets(data)
+      }
     })
     .catch((error) => {
-      console.error(
-        'Category budgets error:',
-        error
-      )
+      if (cancelled) return
 
+      console.error('Category budgets error:', error)
       setCategoryBudgets([])
     })
 
-}, [
-  selectedMonth,
-  selectedYear
-])
-
+  return () => {
+    cancelled = true
+  }
+}, [selectedMonth, selectedYear])
 
       const spent = expenses.reduce(
   (total, expense) => total + Number(expense.amount),
@@ -1279,20 +1321,30 @@ savingsRate={
   selectedMonth={selectedMonth}
   selectedYear={selectedYear}
 
-  onIncomeChanged={() => {
-    apiRequest(
-      `/api/incomes?month=${selectedMonth}&year=${selectedYear}`
-    )
-      .then((data) => {
+onIncomeChanged={() => {
+  const requestVersion =
+    ++incomeRequestVersion.current
+
+  apiRequest(
+    `/api/incomes?month=${selectedMonth}&year=${selectedYear}`
+  )
+    .then((data) => {
+      if (
+        requestVersion === incomeRequestVersion.current
+      ) {
         setIncomes(data)
-      })
-      .catch((error) => {
-        console.error(
-          'Income refresh error:',
-          error
-        )
-      })
-  }}
+      }
+    })
+    .catch((error) => {
+      if (
+        requestVersion !== incomeRequestVersion.current
+      ) {
+        return
+      }
+
+      console.error('Income refresh error:', error)
+    })
+}}
 />
 )}
 

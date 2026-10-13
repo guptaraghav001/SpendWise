@@ -22,13 +22,25 @@ export const apiRequest = async (
       `Bearer ${token}`
   }
 
-  const response = await fetch(
+  let response
+
+try {
+  response = await fetch(
     `${API_URL}${endpoint}`,
     {
       ...options,
       headers
     }
   )
+} catch (error) {
+  if (error.name === 'AbortError') {
+    throw error
+  }
 
-  return handleApiResponse(response)
+  throw new Error(
+    'Unable to connect to the server. Please check your internet connection and try again.'
+  )
+}
+
+return handleApiResponse(response)
 }
