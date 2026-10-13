@@ -123,7 +123,18 @@ function Sidebar({
   Insights
 </button>
 
-
+<button
+  className={
+    activeSection === 'reports'
+      ? 'active'
+      : ''
+  }
+  onClick={() =>
+    onSectionChange('reports')
+  }
+>
+  Reports
+</button>
 
 
       </nav>

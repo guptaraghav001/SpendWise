@@ -29,6 +29,8 @@ import InsightsSection from '../components/InsightsSection.jsx'
 import IncomeSection
   from '../components/IncomeSection.jsx'
 
+import FinancialReports from '../components/FinancialReports.jsx'
+
 function DashboardPage({ onLogout }) {
 const [budget, setBudget] = useState(0)
 const [budgetInput, setBudgetInput] = useState('')
@@ -1429,6 +1431,13 @@ savingsRate={
     formatCurrency={
       formatCurrency
     }
+  />
+)}
+
+{activeSection === 'reports' && (
+  <FinancialReports
+    selectedMonth={selectedMonth}
+    selectedYear={selectedYear}
   />
 )}
 

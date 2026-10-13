@@ -2680,6 +2680,143 @@ app.delete(
   }
 )
 
+// ======================================================
+// MONTHLY FINANCIAL REPORT
+// ======================================================
+
+app.get(
+  '/api/reports/monthly',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const month = Number(req.query.month)
+      const year = Number(req.query.year)
+
+      if (
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12 ||
+        !Number.isInteger(year) ||
+        year < 2000 ||
+        year > 2100
+      ) {
+        return res.status(400).json({
+          message: 'Invalid month or year'
+        })
+      }
+
+      const startDate =
+        `${year}-${String(month).padStart(2, '0')}-01`
+
+      const nextMonth =
+        month === 12 ? 1 : month + 1
+
+      const nextYear =
+        month === 12 ? year + 1 : year
+
+      const endDate =
+        `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+
+      const userId = req.user.userId
+
+      const [
+        incomeResult,
+        expenseResult,
+        categoryResult,
+        budgetResult
+      ] = await Promise.all([
+        pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS total
+           FROM incomes
+           WHERE user_id = $1
+           AND income_date >= $2
+           AND income_date < $3`,
+          [userId, startDate, endDate]
+        ),
+
+        pool.query(
+          `SELECT
+             COALESCE(SUM(amount), 0) AS total,
+             COUNT(*) AS count
+           FROM expenses
+           WHERE user_id = $1
+           AND expense_date >= $2
+           AND expense_date < $3`,
+          [userId, startDate, endDate]
+        ),
+
+        pool.query(
+          `SELECT category,
+                  SUM(amount) AS total
+           FROM expenses
+           WHERE user_id = $1
+           AND expense_date >= $2
+           AND expense_date < $3
+           GROUP BY category
+           ORDER BY total DESC`,
+          [userId, startDate, endDate]
+        ),
+
+        pool.query(
+          `SELECT amount
+           FROM budgets
+           WHERE user_id = $1
+           AND month = $2
+           AND year = $3
+           LIMIT 1`,
+          [userId, month, year]
+        )
+      ])
+
+      const totalIncome =
+        Number(incomeResult.rows[0].total)
+
+      const totalExpenses =
+        Number(expenseResult.rows[0].total)
+
+      const monthlyBudget =
+        Number(budgetResult.rows[0]?.amount || 0)
+
+      const netCashFlow =
+        totalIncome - totalExpenses
+
+      const cashFlowRate =
+        totalIncome > 0
+          ? (netCashFlow / totalIncome) * 100
+          : null
+
+      res.json({
+        month,
+        year,
+        totalIncome,
+        totalExpenses,
+        transactionCount:
+          Number(expenseResult.rows[0].count),
+        monthlyBudget,
+        budgetRemaining:
+          monthlyBudget - totalExpenses,
+        netCashFlow,
+        cashFlowRate,
+        categoryBreakdown:
+          categoryResult.rows.map((row) => ({
+            category: row.category,
+            amount: Number(row.total)
+          }))
+      })
+
+    } catch (error) {
+      console.error(
+        'Monthly report error:',
+        error
+      )
+
+      res.status(500).json({
+        message: 'Failed to generate monthly report'
+      })
+    }
+  }
+)
+
 
 // ======================================================
 // START SERVER

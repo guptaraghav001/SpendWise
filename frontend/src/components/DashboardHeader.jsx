@@ -48,6 +48,11 @@ function DashboardHeader({
   insights: {
     title: 'Insights',
     subtitle: 'Get actionable insights about your finances'
+  },
+
+  reports: {
+    title: 'Financial Reports',
+    subtitle: 'Generate and view detailed financial reports'
   }
 }
 

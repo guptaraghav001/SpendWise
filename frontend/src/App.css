@@ -1624,6 +1624,271 @@ button:disabled {
   opacity: 0.7;
 }
 
+/* ==========================================
+   FINANCIAL REPORTS
+   ========================================== */
+
+.financial-reports {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px;
+  border-radius: 16px;
+  background: #1f1f1f;
+}
+
+.financial-reports > h2 {
+  margin: 0 0 8px;
+}
+
+.financial-reports > p {
+  margin: 0 0 24px;
+  opacity: 0.7;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.report-card {
+  min-width: 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: #292929;
+}
+
+.report-card p {
+  margin: 0 0 8px;
+  opacity: 0.7;
+}
+
+.report-card h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.report-details {
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: #292929;
+}
+
+.report-details h3 {
+  margin: 0 0 16px;
+}
+
+.report-category-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #444;
+}
+
+.report-category-row:last-child {
+  border-bottom: none;
+}
+
+/* REPORT PERFORMANCE */
+
+.report-budget-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.report-progress {
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #3a3a3a;
+}
+
+.report-progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  transition: width 0.3s ease;
+}
+
+.report-progress-normal {
+  background: #646cff;
+}
+
+.report-progress-warning {
+  background: #ff9800;
+}
+
+.report-progress-danger {
+  background: #f44336;
+}
+
+.report-category-item {
+  margin-bottom: 18px;
+}
+
+.report-category-item:last-child {
+  margin-bottom: 0;
+}
+
+.report-category-item .report-category-row {
+  border-bottom: none;
+  padding: 0 0 10px;
+}
+
+.report-category-item .report-category-row strong {
+  text-align: right;
+}
+
+/* Financial Reports — Enhanced Colors */
+
+.financial-reports .report-summary .report-card:nth-child(1) h3 {
+  color: #34d399;
+}
+
+.financial-reports .report-summary .report-card:nth-child(2) h3 {
+  color: #fb7185;
+}
+
+.financial-reports .report-summary .report-card:nth-child(3) h3 {
+  color: #60a5fa;
+}
+
+.financial-reports .report-summary .report-card:nth-child(4) h3 {
+  color: #a78bfa;
+}
+
+.financial-reports .report-card {
+  border: 1px solid #36363d;
+  transition: border-color 0.2s ease;
+}
+
+.financial-reports .report-card:hover {
+  border-color: #646cff;
+}
+
+.financial-reports .report-card p {
+  color: #b5b5c2;
+  opacity: 1;
+}
+
+.financial-reports .report-details h3 {
+  color: #f4f4f5;
+}
+
+/* ==========================================
+   MONTHLY REPORT OVERVIEW
+   ========================================== */
+
+.report-overview {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.report-overview h3 {
+  margin-bottom: 18px;
+}
+
+.report-overview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+
+  padding: 14px 0;
+  border-bottom: 1px solid #3a3a42;
+}
+
+.report-overview-row:last-child {
+  border-bottom: none;
+}
+
+.report-overview-row span {
+  color: #a1a1aa;
+  font-size: 14px;
+}
+
+.report-overview-row strong {
+  color: #f4f4f5;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+
+
+/* ==========================================
+   FINANCIAL REPORT CHART
+   ========================================== */
+
+.report-chart-section {
+  margin-bottom: 24px;
+}
+
+.report-chart-section h3 {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.report-chart-section > p {
+  text-align: center;
+  color: #a1a1aa;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.report-chart-container {
+  width: 100%;
+  height: 300px;
+  min-width: 0;
+}
+
+
+
+/* Financial report PDF export */
+
+.report-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.report-title-row h2 {
+  margin: 0;
+}
+
+.report-download-button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #646cff;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-download-button:hover {
+  background: #525be8;
+}
+
+@media (max-width: 600px) {
+  .report-title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .report-download-button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
 
 
 /* =====================================================
@@ -2057,19 +2322,26 @@ button:disabled {
   min-height: 40px;
 }
 
+.financial-reports {
+  padding: 18px;
+}
+
+.report-summary {
+  grid-template-columns: 1fr;
+}
+
+.report-category-row {
+  flex-wrap: wrap;
+}
+
+.report-chart-container {
+  height: 260px;
+}
+
 }
 
 
 
 
 
-@media (max-width: 900px) {
-  body {
-    outline: 8px solid red;
-  }
-
-
-  
-
-}
 
